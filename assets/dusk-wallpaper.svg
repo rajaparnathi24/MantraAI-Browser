@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+<defs>
+ <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#160f25"/><stop offset=".34" stop-color="#392641"/><stop offset=".56" stop-color="#a9474c"/><stop offset=".67" stop-color="#efac6c"/><stop offset=".79" stop-color="#344459"/><stop offset="1" stop-color="#071321"/></linearGradient>
+ <radialGradient id="sunset"><stop stop-color="#fff2b6" stop-opacity=".95"/><stop offset=".1" stop-color="#ffc15a" stop-opacity=".85"/><stop offset=".46" stop-color="#ff853d" stop-opacity=".24"/><stop offset="1" stop-color="#f65c39" stop-opacity="0"/></radialGradient>
+ <linearGradient id="far" x2="0" y2="1"><stop stop-color="#233750"/><stop offset="1" stop-color="#0a1a2c"/></linearGradient>
+ <linearGradient id="near" x2="0" y2="1"><stop stop-color="#142b44"/><stop offset="1" stop-color="#030a12"/></linearGradient>
+ <filter id="blur"><feGaussianBlur stdDeviation="48"/></filter>
+</defs>
+<rect width="1600" height="1000" fill="url(#sky)"/>
+<ellipse cx="1178" cy="570" rx="460" ry="290" fill="url(#sunset)" filter="url(#blur)"/>
+<circle cx="1178" cy="570" r="17" fill="#fff7d6"/>
+<path d="M0 544 61 516 106 526 153 470 193 494 258 458 309 492 355 463 411 493 462 474 506 514 563 480 620 510 671 482 710 519 760 491 801 511 853 478 918 500 962 472 1012 495 1068 450 1112 481 1164 439 1205 480 1252 444 1303 488 1365 445 1402 475 1460 451 1504 486 1540 462 1600 487V737H0Z" fill="url(#far)" opacity=".92"/>
+<path d="M0 642 67 579 109 594 172 540 230 584 300 552 346 589 409 565 466 610 530 562 589 591 645 554 712 615 778 559 831 601 902 560 968 602 1037 543 1090 589 1157 546 1211 603 1269 554 1332 598 1390 541 1449 584 1512 535 1558 568 1600 546V838H0Z" fill="#10243a"/>
+<path d="m0 626 65 20 59-11 48-31 42 24 78-37 75 40 53-17 49 42 67-13 49 27 69-31 43 41 58-27 77 25 49-31 71 23 54-20 55 34 56-23 77 20 48-20 63 29 64-24 47 31 75-20 52 25 63-21 77 33v370H0Z" fill="#0c1c30" opacity=".94"/>
+<path d="M0 704 88 661 154 689 230 623 307 676 390 630 462 687 526 638 604 693 688 631 766 681 850 633 924 687 1000 616 1088 675 1161 616 1233 680 1320 620 1386 667 1473 613 1530 657 1600 620v380H0Z" fill="url(#near)"/>
+<path d="M0 800 120 720 216 758 310 694 399 744 482 704 578 769 670 710 759 756 850 690 947 748 1041 695 1145 742 1232 677 1339 736 1426 688 1512 735 1600 682v318H0Z" fill="#081522"/>
+<path d="M0 889 139 790 225 826 329 750 434 818 532 759 627 827 731 763 837 825 946 756 1048 811 1146 752 1248 817 1348 750 1458 811 1546 764 1600 793v207H0Z" fill="#050e18"/>
+<g fill="#02080e" opacity=".68"><path d="m96 1000 6-109 9 109m40 0 5-127 8 127m84 0 6-98 8 98m177 0 5-114 9 114m64 0 6-140 8 140m321 0 5-102 8 102m182 0 7-126 9 126m112 0 6-104 8 104m132 0 5-132 9 132"/></g>
+</svg>
