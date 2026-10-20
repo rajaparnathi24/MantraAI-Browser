@@ -657,13 +657,57 @@ ipcMain.handle('auth:logout', async (event) => {
   return true;
 });
 
-app.whenReady().then(async ()=>{
-  firebaseConfig = readFirebaseConfig();
-  await loadAuthSession();
-  for(const extensionPath of readExtensionPaths()) { try { await session.defaultSession.extensions.loadExtension(extensionPath); } catch(error) { console.warn('Could not restore unpacked extension:',error.message); } }
-  createWindow();
-}).catch((error)=>{
-  console.error('MantraAI Browser failed to start:',error);
-  dialog.showErrorBox('MantraAI Browser failed to start',error.stack||error.message||String(error));
+
+function extractExternalUrl(args) {
+  return args.find((arg) => /^https?:\/\//i.test(arg)) || null;
+}
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, commandLine) => {
+    const externalUrl = extractExternalUrl(commandLine);
+
+    if (!win || win.isDestroyed()) createWindow();
+    focusBrowserWindow();
+
+    if (externalUrl) {
+      const tab = tabs.find((item) => item.id === activeTabId);
+      if (tab) navigateTab(tab, externalUrl);
+      else createTab({ activate: true, url: externalUrl });
+    }
+  });
+
+  app.whenReady().then(async () => {
+    firebaseConfig = readFirebaseConfig();
+    await loadAuthSession();
+
+    for (const extensionPath of readExtensionPaths()) {
+      try {
+        await session.defaultSession.extensions.loadExtension(extensionPath);
+      } catch (error) {
+        console.warn('Could not restore unpacked extension:', error.message);
+      }
+    }
+
+    createWindow();
+
+    const startupUrl = extractExternalUrl(process.argv);
+    if (startupUrl) {
+      const tab = tabs.find((item) => item.id === activeTabId);
+      if (tab) navigateTab(tab, startupUrl);
+    }
+  }).catch((error) => {
+    console.error('MantraAI Browser failed to start:', error);
+    dialog.showErrorBox(
+      'MantraAI Browser failed to start',
+      error.stack || error.message || String(error)
+    );
+  });
+}
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
 });
-app.on('window-all-closed',()=>{ if(process.platform!=='darwin')app.quit(); });

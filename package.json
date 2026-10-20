@@ -31,15 +31,29 @@
       "assets/**/*",
       "package.json"
     ],
+    "protocols": [
+      {
+        "name": "Web URL",
+        "schemes": [
+          "http",
+          "https"
+        ]
+      }
+    ],
     "win": {
       "target": "nsis",
-      "icon": "assets/mantraai-logo-transparent.png"
+      "icon": "assets/mantraai-logo.ico",
+      "legalTrademarks": "MantraAI Browser",
+      "artifactName": "${productName} Setup ${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh"
     }
   },
   "dependencies": {
