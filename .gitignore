@@ -4,6 +4,7 @@ package.json.backup
 .env
 .env.*
 !.env.example
+firebase-config.json
 *.log
 .DS_Store
 Thumbs.db

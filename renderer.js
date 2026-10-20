@@ -1,17 +1,30 @@
 const api = window.browserAPI;
 const $ = (id) => document.getElementById(id);
-const panel = $('assistant-panel');
+const chromeMenu = $('chrome-menu');
 const home = $('home');
 const defaultHome = $('default-home');
+const panel = $('assistant-panel');
 const quickPanel = $('panel-content');
 const contentView = $('content-view');
-let panelOpen = true;
+let panelOpen = false;
 let activeUrl = '';
-let bookmarks = JSON.parse(localStorage.getItem('mantra-bookmarks') || '[]');
-let historyItems = JSON.parse(localStorage.getItem('mantra-history') || '[]');
+let activeTitle = '';
+let bookmarks = readStoredArray('mantra-bookmarks');
+let historyItems = readStoredArray('mantra-history');
+let readingItems = readStoredArray('mantra-reading-list');
+let tabGroups = readStoredArray('mantra-tab-groups');
+let notesItems = readStoredArray('mantra-notes-list');
+if (!notesItems.length && localStorage.getItem('mantra-notes')) notesItems=[{id:cryptoRandomId(),title:localStorage.getItem('mantra-notes-title')||'Note',body:localStorage.getItem('mantra-notes'),time:Date.now()}];
+let activeNoteId = notesItems[0]?.id || null;
 let downloads = [];
 let tabs = [];
 let activeTabId = null;
+let authUser = null;
+let authConfigured = false;
+let googleConfigured = false;
+let authConfigHint = 'See README.md for Firebase configuration instructions, then restart MantraAI Browser.';
+let authMode = 'login';
+let authBusy = false;
 const WALLPAPERS = {
   default:'assets/home-wallpaper.svg',
   dusk:'assets/dusk-wallpaper.svg',
@@ -19,6 +32,100 @@ const WALLPAPERS = {
 };
 let rotationTimer = null;
 let lastFindQuery = '';
+
+function readStoredArray(key) { try { const value=JSON.parse(localStorage.getItem(key)||'[]'); return Array.isArray(value)?value:[]; } catch { return []; } }
+
+const DEFAULT_HOME_SHORTCUTS = [
+  { name: 'Google', url: 'https://www.google.com' },
+  { name: 'YouTube', url: 'https://www.youtube.com' },
+  { name: 'GitHub', url: 'https://github.com' },
+  { name: 'Gmail', url: 'https://mail.google.com' },
+  { name: 'ChatGPT', url: 'https://chatgpt.com' }
+];
+
+function normalizeShortcutUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`);
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+  } catch { return ''; }
+}
+
+function loadHomeShortcuts() {
+  const saved = localStorage.getItem('mantra-home-shortcuts');
+  if (saved === null) return DEFAULT_HOME_SHORTCUTS.map((item) => ({ ...item }));
+  try {
+    const parsed = JSON.parse(saved);
+    if (!Array.isArray(parsed)) return DEFAULT_HOME_SHORTCUTS.map((item) => ({ ...item }));
+    return parsed.map((item) => ({ name: String(item.name || '').trim().slice(0, 32), url: normalizeShortcutUrl(item.url) }))
+      .filter((item) => item.name && item.url).slice(0, 24);
+  } catch { return DEFAULT_HOME_SHORTCUTS.map((item) => ({ ...item })); }
+}
+
+let homeShortcuts = loadHomeShortcuts();
+
+function saveHomeShortcuts() {
+  localStorage.setItem('mantra-home-shortcuts', JSON.stringify(homeShortcuts));
+  renderHomeShortcuts();
+}
+
+function renderHomeShortcuts() {
+  const host = $('favorites');
+  host.innerHTML = homeShortcuts.map((item, index) => {
+    const hostname = new URL(item.url).hostname;
+    const favicon = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=64`;
+    return `<div class="favorite-card" data-shortcut-card="${index}">
+      <button class="favorite-open" type="button" data-shortcut-open="${index}" title="Open ${escapeAttr(item.name)}" aria-label="Open ${escapeAttr(item.name)}"><img class="favorite-icon" src="${favicon}" alt=""><span>${escapeHtml(item.name)}</span></button>
+      <button class="favorite-menu-toggle" type="button" data-shortcut-menu="${index}" aria-label="Options for ${escapeAttr(item.name)}" aria-expanded="false" title="Shortcut options">⋮</button>
+      <div class="shortcut-menu" data-shortcut-menu-content="${index}" role="menu" hidden><button type="button" role="menuitem" data-shortcut-edit="${index}">Edit shortcut</button><button type="button" role="menuitem" data-shortcut-remove="${index}">Remove shortcut</button></div>
+    </div>`;
+  }).join('') + `<div class="favorite-card add-favorite-card"><button id="add-favorite" class="favorite-open" type="button" aria-label="Add a shortcut"><span class="favorite-icon add">+</span><span>Add</span></button></div>`;
+
+  host.querySelectorAll('.favorite-icon[src]').forEach((image) => image.addEventListener('error', () => {
+    image.replaceWith(Object.assign(document.createElement('span'), { className: 'favorite-icon favorite-fallback', textContent: '✦', ariaHidden: 'true' }));
+  }, { once: true }));
+}
+
+let shortcutEditIndex = null;
+
+function openShortcutEditor(index = null) {
+  if (index === null && homeShortcuts.length >= 24) { toast('You can save up to 24 shortcuts'); return; }
+  const item = index === null ? { name: '', url: '' } : homeShortcuts[index];
+  if (!item) return;
+  $('favorites').querySelectorAll('.shortcut-menu').forEach((menu) => { menu.hidden = true; });
+  $('favorites').querySelectorAll('.favorite-menu-toggle').forEach((button) => button.setAttribute('aria-expanded', 'false'));
+  shortcutEditIndex = index;
+  $('shortcut-editor-title').textContent = index === null ? 'Add a shortcut' : 'Edit shortcut';
+  $('shortcut-name').value = item.name;
+  $('shortcut-url').value = item.url;
+  $('shortcut-error').textContent = '';
+  $('shortcut-editor').hidden = false;
+  $('shortcut-name').focus();
+  $('shortcut-name').select();
+}
+
+function closeShortcutEditor() {
+  $('shortcut-editor').hidden = true;
+  shortcutEditIndex = null;
+}
+
+function saveShortcutEditor(event) {
+  event.preventDefault();
+  const name = $('shortcut-name').value.trim().slice(0, 32);
+  const url = normalizeShortcutUrl($('shortcut-url').value);
+  const error = $('shortcut-error');
+  if (!name) { error.textContent = 'Enter a name for this shortcut.'; $('shortcut-name').focus(); return; }
+  if (!url) { error.textContent = 'Enter a valid website address, such as example.com.'; $('shortcut-url').focus(); return; }
+  const duplicateIndex = homeShortcuts.findIndex((item, index) => index !== shortcutEditIndex && item.url === url);
+  if (duplicateIndex !== -1) { error.textContent = 'This website is already in your shortcuts.'; $('shortcut-url').focus(); return; }
+
+  const shortcut = { name, url };
+  if (shortcutEditIndex === null) homeShortcuts.push(shortcut);
+  else homeShortcuts[shortcutEditIndex] = shortcut;
+  saveHomeShortcuts();
+  closeShortcutEditor();
+}
 
 function renderTabs() {
   const strip = $('tab-strip');
@@ -40,7 +147,7 @@ function setPanel(open) {
   home.classList.toggle('panel-open', open);
   defaultHome.classList.toggle('panel-open', open);
   $('panel-toggle').setAttribute('aria-expanded', String(open));
-  $('panel-toggle').title = open ? 'Close MantraAI panel' : 'Open MantraAI panel';
+  $('panel-toggle').title = open ? 'Close Sidebar' : 'Open Sidebar';
   api.setPanelOpen(open);
 }
 
@@ -71,29 +178,29 @@ function updateContent(name) {
   selectSideItem(name);
   quickPanel.hidden = true;
   contentView.hidden = false;
-  const titles = {chat:'MantraAI Chat',bookmarks:'Bookmarks',history:'History',downloads:'Downloads',extensions:'Extensions',settings:'Settings',notes:'Notes',reading:'Reading List'};
+  contentView.dataset.panel = name;
+  const titles = {chat:'MantraAI Chat',openTabs:'Open Tabs',bookmarks:'Bookmarks',history:'History',downloads:'Downloads',extensions:'Extensions',settings:'Settings',notes:'Notes',reading:'Reading List'};
   const title = titles[name] || 'MantraAI';
   let body = '';
-  if (name === 'bookmarks') {
-    body = bookmarks.length ? bookmarks.map((item) => `<button class="content-row" data-open-url="${escapeAttr(item.url)}">☆ &nbsp;${escapeHtml(item.title || item.url)}<small> &nbsp; ${escapeHtml(item.url)}</small></button>`).join('') : '<div class="empty">Your saved pages will appear here.</div>';
-  } else if (name === 'history') {
-    body = historyItems.length ? historyItems.map((item) => `<button class="content-row" data-open-url="${escapeAttr(item.url)}">◷ &nbsp;${escapeHtml(item.title || item.url)}<small> &nbsp; ${escapeHtml(item.url)}</small></button>`).join('') : '<div class="empty">Pages you visit will appear here.</div>';
-  } else if (name === 'downloads') {
-    body = downloads.length ? downloads.map((item) => `<div class="content-row">↓ &nbsp;${escapeHtml(item.name)}<small> &nbsp; ${escapeHtml(item.state)}</small></div>`).join('') : '<div class="empty">Your downloads will appear here.</div>';
+  if (['openTabs','bookmarks','history','downloads','reading','extensions'].includes(name)) {
+    body = `<input class="collection-search" type="search" placeholder="Search ${titles[name].toLowerCase()}" aria-label="Search ${titles[name]}"><div class="collection-actions">${name === 'openTabs' ? '<button class="content-row" data-group-create>Create tab group</button>' : ''}${name === 'bookmarks' ? '<button class="content-row" data-bookmark-add>Bookmark current page</button><button class="content-row" data-bookmark-import>Import bookmarks</button><button class="content-row" data-bookmark-export>Export bookmarks</button>' : ''}${name === 'history' ? '<button class="content-row" data-history-clear>Clear browsing data</button>' : ''}${name === 'reading' ? '<button class="content-row" data-reading-add>Save current page</button>' : ''}${name === 'extensions' ? '<button class="content-row" data-extension-add>Load unpacked extension</button><button class="content-row" data-extension-store>Open Chrome Web Store</button><small>Electron supports only a subset of Chrome extension APIs; some extensions may not work.</small>' : ''}</div><div class="collection-list"></div>`;
   } else if (name === 'settings') {
-    body = `<label for="theme-select">Appearance</label><select id="theme-select"><option value="dark">Midnight Saffron</option><option value="light">Light</option></select><label for="homepage-input">Homepage</label><input id="homepage-input" value="${escapeAttr(localStorage.getItem('mantra-homepage') || 'https://www.google.com')}"><label for="wallpaper-select">New tab wallpaper</label><select id="wallpaper-select"><option value="default">Midnight Sunrise · Default</option><option value="dusk">Saffron Dusk</option><option value="blue">Blue Hour</option><option value="custom">Your image…</option></select><button class="content-row" id="choose-wallpaper">Choose an image from this device</button><label class="setting-check"><input type="checkbox" id="wallpaper-rotate"> Random wallpaper every 30 minutes</label><p id="wallpaper-message"></p><button class="save-action" id="save-settings">Save settings</button><p id="settings-message"></p>`;
-  } else if (name === 'extensions') {
-    body = '<div class="empty">Extensions are managed by Chromium.</div>';
+    body = `<input id="settings-search" type="search" placeholder="Search settings" aria-label="Search settings"><div class="settings-group"><div class="settings-account"><strong>Account</strong><div id="settings-account-state"></div><button id="settings-auth-action" class="content-row" type="button">Sign in or add an account</button></div></div><div class="settings-group"><label for="theme-select">Appearance</label><select id="theme-select"><option value="dark">Midnight Saffron</option><option value="light">Light</option></select><label for="homepage-input">Homepage</label><input id="homepage-input" value="${escapeAttr(localStorage.getItem('mantra-homepage') || 'https://www.google.com')}"><label for="wallpaper-select">New tab wallpaper</label><select id="wallpaper-select"><option value="default">Midnight Sunrise · Default</option><option value="dusk">Saffron Dusk</option><option value="blue">Blue Hour</option><option value="custom">Your image…</option></select><button class="content-row" id="choose-wallpaper">Choose an image from this device</button><label class="setting-check"><input type="checkbox" id="wallpaper-rotate"> Random wallpaper every 30 minutes</label><p id="wallpaper-message"></p></div><div class="settings-group"><label for="search-engine">Default search engine</label><select id="search-engine"><option value="google">Google</option><option value="bing">Bing</option><option value="duckduckgo">DuckDuckGo</option><option value="custom">Custom URL template</option></select><input id="search-template" placeholder="https://example.com/search?q={searchTerms}"><button id="clear-site-data" class="content-row">Clear cookies, cache &amp; site data</button></div><button class="save-action" id="save-settings">Save settings</button><p id="settings-message"></p><button id="settings-logout" class="settings-logout" type="button" hidden>Log out</button>`;
   } else if (name === 'notes') {
-    body = `<textarea id="notes-text" rows="10" placeholder="Write a note..." style="width:100%;resize:vertical;background:#0d1926;border:1px solid #34495d;border-radius:8px;color:#f0f0ef;padding:12px">${escapeHtml(localStorage.getItem('mantra-notes') || '')}</textarea><button class="save-action" id="save-notes">Save note</button>`;
-  } else if (name === 'reading') {
-    body = '<div class="empty">Save a page to your reading list to find it here.</div>';
+    body = `<div class="notes-actions"><input id="notes-search" type="search" placeholder="Search notes"><button id="notes-new" class="content-row">New note</button></div><div id="notes-list"></div><div class="notes-editor"><input id="notes-title" placeholder="Note title"><textarea id="notes-text" rows="10" placeholder="Write a note..."></textarea><button id="notes-delete" class="content-row">Delete note</button><small id="notes-save-state">Saved automatically</small></div>`;
   } else {
-    body = '<div class="empty">Ask anything and explore the web with MantraAI.</div>';
+    body = '<div class="empty">MantraAI Chat needs an AI service configuration. Web Search is available without an account and uses your selected search engine.</div>';
   }
-  contentView.innerHTML = `<h2>${title}</h2><p>Make your browsing feel more like yours.</p>${body}`;
-  contentView.querySelectorAll('[data-open-url]').forEach((button) => button.addEventListener('click', () => navigate(button.dataset.openUrl)));
+  contentView.innerHTML = `<h2>${title}</h2>${['settings','notes'].includes(name) ? '' : `<p>${name==='openTabs'?'Switch between your open pages and organize tabs into local groups.':name==='extensions'?'Manage unpacked extensions supported by this Electron build.':'Search and manage your saved browser data.'}</p>`}${body}`;
+  if (['openTabs','bookmarks','history','downloads','reading','extensions'].includes(name)) renderCollection(name, '');
+  if (!['openTabs','bookmarks','history','downloads','reading','extensions'].includes(name)) contentView.querySelectorAll('[data-open-url]').forEach((button) => button.addEventListener('click', () => navigate(button.dataset.openUrl)));
   if (name === 'settings') {
+    updateSettingsAuth();
+    contentView.querySelector('#settings-auth-action').addEventListener('click', openAuth);
+    contentView.querySelector('#settings-logout').addEventListener('click', async () => {
+      try { await api.auth.logout(); toast('You have been logged out'); }
+      catch { toast('Could not log out. Please try again.'); }
+    });
     const theme = contentView.querySelector('#theme-select');
     theme.value = localStorage.getItem('mantra-theme') || 'dark';
     theme.addEventListener('change', () => { document.body.classList.toggle('light-theme', theme.value === 'light'); localStorage.setItem('mantra-theme', theme.value); });
@@ -109,14 +216,94 @@ function updateContent(name) {
       localStorage.setItem('mantra-rotate-wallpaper', String(event.target.checked));
       configureWallpaperRotation();
     });
+    const searchEngine=contentView.querySelector('#search-engine');
+    searchEngine.value=localStorage.getItem('mantra-search-engine')||'google';
+    const searchTemplate=contentView.querySelector('#search-template');
+    searchTemplate.value=localStorage.getItem('mantra-search-template')||'';
+    searchTemplate.hidden=searchEngine.value!=='custom';
+    searchEngine.addEventListener('change',()=>{searchTemplate.hidden=searchEngine.value!=='custom';});
+    contentView.querySelector('#clear-site-data').addEventListener('click',async()=>{if(!confirm('Clear cookies, cache, and website storage for regular browsing?'))return;try{await api.clearSiteData();historyItems=[];saveCollection('mantra-history',historyItems);toast('Browsing data cleared');}catch(error){toast(error.message||'Could not clear browsing data');}});
+    contentView.querySelector('#settings-search').addEventListener('input',(event)=>{const query=event.target.value.toLowerCase();contentView.querySelectorAll('.settings-group').forEach((group)=>{group.hidden=query&&!group.textContent.toLowerCase().includes(query);});});
     contentView.querySelector('#save-settings').addEventListener('click', () => {
       const value = contentView.querySelector('#homepage-input').value.trim();
-      try { const url = new URL(value); if (!['http:','https:'].includes(url.protocol)) throw new Error(); localStorage.setItem('mantra-homepage', url.href); contentView.querySelector('#settings-message').textContent = 'Homepage saved.'; }
-      catch { contentView.querySelector('#settings-message').textContent = 'Enter a valid HTTP or HTTPS website URL.'; }
+      try { const url = new URL(value); if (!['http:','https:'].includes(url.protocol)) throw new Error(); if(searchEngine.value==='custom'&&!searchTemplate.value.includes('{searchTerms}'))throw new Error('Custom search template must include {searchTerms}.'); if(searchEngine.value==='custom'){const template=searchTemplate.value.replace('{searchTerms}','test');const parsed=new URL(template);if(!['https:','http:'].includes(parsed.protocol))throw new Error('Use an HTTP or HTTPS search template.');} localStorage.setItem('mantra-homepage', url.href);localStorage.setItem('mantra-search-engine',searchEngine.value);localStorage.setItem('mantra-search-template',searchTemplate.value.trim()); contentView.querySelector('#settings-message').textContent = 'Settings saved.'; }
+      catch(error) { contentView.querySelector('#settings-message').textContent = error.message||'Enter a valid HTTP or HTTPS website URL.'; }
     });
   }
-  if (name === 'notes') contentView.querySelector('#save-notes').addEventListener('click', () => { localStorage.setItem('mantra-notes', contentView.querySelector('#notes-text').value); toast('Note saved'); });
+  if (['openTabs','bookmarks','history','downloads','reading','extensions'].includes(name)) bindCollection(name);
+  if (name === 'notes') {
+    const save = () => { const item=notesItems.find((note)=>note.id===activeNoteId);if(item){item.title=contentView.querySelector('#notes-title').value;item.body=contentView.querySelector('#notes-text').value;item.time=Date.now();saveCollection('mantra-notes-list',notesItems);localStorage.setItem('mantra-notes-title',item.title);localStorage.setItem('mantra-notes',item.body);contentView.querySelector('#notes-save-state').textContent='Saved';renderNotes(contentView.querySelector('#notes-search').value);} };
+    contentView.querySelector('#notes-title').addEventListener('input', save);
+    contentView.querySelector('#notes-text').addEventListener('input', save);
+    contentView.querySelector('#notes-search').addEventListener('input',(event)=>renderNotes(event.target.value));
+    contentView.querySelector('#notes-new').addEventListener('click',()=>{const item={id:cryptoRandomId(),title:'',body:'',time:Date.now()};notesItems.unshift(item);activeNoteId=item.id;saveCollection('mantra-notes-list',notesItems);renderNotes('');});
+    contentView.querySelector('#notes-delete').addEventListener('click',()=>{notesItems=notesItems.filter((note)=>note.id!==activeNoteId);activeNoteId=notesItems[0]?.id||null;saveCollection('mantra-notes-list',notesItems);renderNotes(contentView.querySelector('#notes-search').value);});
+    renderNotes('');
+  }
 }
+
+function renderNotes(query='') {
+  const list=contentView.querySelector('#notes-list');if(!list)return;const q=query.toLowerCase();const visible=notesItems.filter((note)=>`${note.title} ${note.body}`.toLowerCase().includes(q));
+  list.innerHTML=visible.length?visible.map((note)=>`<button class="content-row note-row ${note.id===activeNoteId?'note-active':''}" data-note-id="${escapeAttr(note.id)}">${escapeHtml(note.title||'Untitled note')}<small>${escapeHtml(note.body.slice(0,90))}</small></button>`).join(''):'<div class="empty">No notes yet. Create a note to get started.</div>';
+  const active=notesItems.find((note)=>note.id===activeNoteId);const editor=contentView.querySelector('.notes-editor');if(editor)editor.hidden=!active;
+  if(active){const titleInput=contentView.querySelector('#notes-title');const bodyInput=contentView.querySelector('#notes-text');if(titleInput.value!==active.title)titleInput.value=active.title;if(bodyInput.value!==active.body)bodyInput.value=active.body;}
+  list.querySelectorAll('[data-note-id]').forEach((button)=>button.addEventListener('click',()=>{activeNoteId=button.dataset.noteId;renderNotes(contentView.querySelector('#notes-search').value);}));
+}
+
+function renderCollection(name, query) {
+  const host = contentView.querySelector('.collection-list'); if (!host) return;
+  const q = query.trim().toLowerCase();
+  let items = [];
+  if (name === 'openTabs') items = tabs.map((tab)=>({...tab, group:tabGroups.find((group)=>group.tabs.includes(tab.id))?.name||''})).filter((item)=>!item.verseHome);
+  if (name === 'bookmarks') items = bookmarks;
+  if (name === 'history') items = historyItems;
+  if (name === 'downloads') items = downloads;
+  if (name === 'reading') items = readingItems;
+  if (name === 'extensions') { api.extensions('list').then((list)=>{ if(contentView.dataset.panel==='extensions') renderExtensionRows(list,q); }).catch((error)=>{host.innerHTML=`<div class="empty">Could not load extensions: ${escapeHtml(error.message)}</div>`;}); return; }
+  items = items.filter((item)=>`${item.title||item.name||''} ${item.url||item.path||''} ${item.group||''} ${item.state||''}`.toLowerCase().includes(q));
+  if (!items.length) { host.innerHTML=`<div class="empty">${q?'No matching items.':({openTabs:'No open tabs.',bookmarks:'Your saved pages will appear here.',history:'Pages you visit will appear here.',downloads:'Your downloads will appear here.',reading:'Save a page to your reading list to find it here.'}[name])}</div>`; return; }
+  host.innerHTML = items.map((item)=>{
+    if(name==='openTabs') return `<div class="collection-entry ${item.id===activeTabId?'entry-active':''}"><button class="entry-open" data-tab-open="${item.id}">${item.id===activeTabId?'●':'○'} ${escapeHtml(item.title||'New Tab')}<small>${escapeHtml(item.url||'New Tab')}${item.group?` · ${escapeHtml(item.group)}`:''}</small></button><select data-tab-group="${item.id}" aria-label="Tab group"><option value="">No group</option>${tabGroups.map((g)=>`<option value="${escapeAttr(g.id)}" ${g.tabs.includes(item.id)?'selected':''}>${escapeHtml(g.name)}</option>`).join('')}</select><button data-tab-close="${item.id}" aria-label="Close tab">×</button></div>`;
+    if(name==='bookmarks') return `<div class="collection-entry"><button class="entry-open" data-open-url="${escapeAttr(item.url)}">☆ ${escapeHtml(item.title||item.url)}<small>${escapeHtml(item.url)}</small></button><button data-bookmark-edit="${escapeAttr(item.url)}">Edit</button><button data-bookmark-delete="${escapeAttr(item.url)}">×</button></div>`;
+    if(name==='history') return `<div class="collection-entry"><button class="entry-open" data-open-url="${escapeAttr(item.url)}">◷ ${escapeHtml(item.title||item.url)}<small>${escapeHtml(item.url)} · ${new Date(item.time||Date.now()).toLocaleString()}</small></button><button data-history-delete="${escapeAttr(item.url)}" aria-label="Remove history item">×</button></div>`;
+    if(name==='downloads') { const percent=item.total?Math.min(100,Math.round(item.received/item.total*100)):0; return `<div class="collection-entry"><div class="entry-label">↓ ${escapeHtml(item.name)}<small>${escapeHtml(item.state)} · ${formatBytes(item.received)} / ${item.total?formatBytes(item.total):'Unknown size'} ${item.total&&['In progress','Paused'].includes(item.state)?`· ${percent}%`:''}<br>${escapeHtml(item.path||'')}</small></div>${['In progress','Paused'].includes(item.state)?`<button data-download="${item.id}" data-download-action="${item.paused?'resume':'pause'}">${item.paused?'Resume':'Pause'}</button><button data-download="${item.id}" data-download-action="cancel">Cancel</button>`:''}${item.state==='Interrupted'&&item.canResume?`<button data-download="${item.id}" data-download-action="resume">Resume</button>`:''}${item.state==='Complete'?`<button data-download="${item.id}" data-download-action="open">Open</button><button data-download="${item.id}" data-download-action="reveal">Show</button>`:''}</div>`; }
+    return `<div class="collection-entry"><button class="entry-open" data-open-url="${escapeAttr(item.url)}">${item.read?'✓':'◉'} ${escapeHtml(item.title||item.url)}<small>${escapeHtml(item.url)}</small></button><button data-reading-toggle="${escapeAttr(item.url)}">${item.read?'Unread':'Read'}</button><button data-reading-delete="${escapeAttr(item.url)}">×</button></div>`;
+  }).join('');
+}
+function formatBytes(bytes) { if(!Number(bytes))return '0 B'; const units=['B','KB','MB','GB']; const unit=Math.min(Math.floor(Math.log(bytes)/Math.log(1024)),units.length-1); return `${(bytes/1024**unit).toFixed(unit?1:0)} ${units[unit]}`; }
+function saveCollection(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
+function bindCollection(name) {
+  const search=contentView.querySelector('.collection-search'); let searchTimer=null; search?.addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>renderCollection(name,search.value),100);});
+  const actionHost=contentView.querySelector('.collection-actions');
+  const listHost=contentView.querySelector('.collection-list');
+  const handleClick=async (event)=>{
+    const button=event.target.closest('button'); if(!button)return;
+    const run=async (fn)=>{try{await fn();renderCollection(name,search?.value||'');}catch(error){toast(error.message||'Action failed');}};
+    if(button.hasAttribute('data-open-url')) navigate(button.dataset.openUrl);
+    else if(button.hasAttribute('data-tab-open')) api.selectTab(Number(button.dataset.tabOpen));
+    else if(button.hasAttribute('data-tab-close')) api.closeTab(Number(button.dataset.tabClose));
+    else if(button.hasAttribute('data-group-create')) { const groupName=prompt('Tab group name'); if(groupName?.trim()){tabGroups.push({id:cryptoRandomId(),name:groupName.trim(),tabs:[]});saveCollection('mantra-tab-groups',tabGroups);renderCollection(name,search?.value||'');} }
+    else if(button.hasAttribute('data-bookmark-add')) toggleBookmark();
+    else if(button.hasAttribute('data-bookmark-delete')) { bookmarks=bookmarks.filter((item)=>item.url!==button.dataset.bookmarkDelete);saveCollection('mantra-bookmarks',bookmarks);renderCollection(name,search?.value||''); }
+    else if(button.hasAttribute('data-bookmark-edit')) { const item=bookmarks.find((entry)=>entry.url===button.dataset.bookmarkEdit); if(item){const title=prompt('Bookmark title',item.title);if(title===null)return;const url=prompt('Bookmark URL',item.url);if(url===null)return;try{const parsed=new URL(url.trim());if(!['http:','https:'].includes(parsed.protocol))throw new Error();item.title=title.trim()||parsed.href;item.url=parsed.href;saveCollection('mantra-bookmarks',bookmarks);renderCollection(name,search?.value||'');}catch{toast('Enter a valid HTTP or HTTPS URL');}} }
+    else if(button.hasAttribute('data-bookmark-import')) await run(async()=>{const imported=await api.bookmarkFile('import');if(imported){const seen=new Set(bookmarks.map((entry)=>entry.url));bookmarks=[...imported.filter((entry)=>!seen.has(entry.url)),...bookmarks];saveCollection('mantra-bookmarks',bookmarks);}});
+    else if(button.hasAttribute('data-bookmark-export')) await run(async()=>{await api.bookmarkFile('export',bookmarks);});
+    else if(button.hasAttribute('data-history-delete')) { historyItems=historyItems.filter((item)=>item.url!==button.dataset.historyDelete);saveCollection('mantra-history',historyItems);renderCollection(name,search?.value||''); }
+    else if(button.hasAttribute('data-history-clear')) await run(async()=>{if(confirm('Clear saved history, cookies, cache, and site storage for regular browsing?')){historyItems=[];saveCollection('mantra-history',historyItems);await api.clearSiteData();}});
+    else if(button.hasAttribute('data-reading-add')) {if(activeUrl&&!readingItems.some((item)=>item.url===activeUrl)){readingItems.unshift({url:activeUrl,title:activeTitle||activeUrl,time:Date.now(),read:false});saveCollection('mantra-reading-list',readingItems);renderCollection(name,search?.value||'');}}
+    else if(button.hasAttribute('data-reading-toggle')) {const item=readingItems.find((entry)=>entry.url===button.dataset.readingToggle);if(item){item.read=!item.read;saveCollection('mantra-reading-list',readingItems);renderCollection(name,search?.value||'');}}
+    else if(button.hasAttribute('data-reading-delete')) {readingItems=readingItems.filter((item)=>item.url!==button.dataset.readingDelete);saveCollection('mantra-reading-list',readingItems);renderCollection(name,search?.value||'');}
+    else if(button.hasAttribute('data-download')) await run(()=>api.downloadAction(button.dataset.download,button.dataset.downloadAction));
+    else if(button.hasAttribute('data-extension-add')) await run(async()=>{const ext=await api.extensions('add');if(ext)toast(`Loaded ${ext.name}; compatibility depends on Electron-supported APIs.`);});
+    else if(button.hasAttribute('data-extension-store')) api.navigate('https://chromewebstore.google.com/');
+    else if(button.hasAttribute('data-extension-remove')) await run(()=>api.extensions('remove',button.dataset.extensionRemove));
+  };
+  actionHost?.addEventListener('click',handleClick);
+  listHost?.addEventListener('click',handleClick);
+  listHost?.addEventListener('change',(event)=>{const select=event.target.closest('[data-tab-group]');if(!select)return;const id=Number(select.dataset.tabGroup);tabGroups.forEach((group)=>group.tabs=group.tabs.filter((tabId)=>tabId!==id));if(select.value)tabGroups.find((group)=>group.id===select.value)?.tabs.push(id);saveCollection('mantra-tab-groups',tabGroups);renderCollection(name,search?.value||'');});
+}
+function cryptoRandomId(){return `${Date.now()}-${Math.random().toString(36).slice(2,9)}`;}
+function renderExtensionRows(list,query){const host=contentView.querySelector('.collection-list');if(!host)return;const rows=list.filter((item)=>`${item.name} ${item.description} ${item.version}`.toLowerCase().includes(query));host.innerHTML=rows.length?rows.map((item)=>`<div class="collection-entry"><div class="entry-label">${escapeHtml(item.name)}<small>Version ${escapeHtml(item.version)} · ${escapeHtml(item.description||'Unpacked extension')}</small></div><button data-extension-remove="${escapeAttr(item.id)}">Remove</button></div>`).join(''):'<div class="empty">No compatible extensions loaded.</div>';}
 
 function applyWallpaper(name) {
   const wallpaper = name === 'custom' ? localStorage.getItem('mantra-custom-wallpaper') : WALLPAPERS[name];
@@ -157,6 +344,72 @@ function toast(message) {
   const node = document.createElement('div'); node.className = 'toast'; node.textContent = message; document.body.appendChild(node);
   setTimeout(() => node.remove(), 2300);
 }
+function showAuthMessage(message, success = false) {
+  const status = $('auth-message');
+  status.textContent = message || '';
+  status.classList.toggle('success', success);
+}
+function updateSettingsAuth() {
+  if (contentView.dataset.panel !== 'settings') return;
+  const state = contentView.querySelector('#settings-account-state');
+  const signIn = contentView.querySelector('#settings-auth-action');
+  const logout = contentView.querySelector('#settings-logout');
+  if (!state || !signIn || !logout) return;
+  state.innerHTML = authUser
+    ? `<span class="account-status">Signed in</span><strong>${escapeHtml(authUser.displayName || authUser.email || 'MantraAI account')}</strong>${authUser.displayName && authUser.email ? `<small>${escapeHtml(authUser.email)}</small>` : ''}`
+    : '<span class="account-status signed-out">Not signed in</span><small>Sign in is optional. Browsing works without an account.</small>';
+  signIn.hidden = Boolean(authUser);
+  logout.hidden = !authUser;
+}
+function renderAuth(user) {
+  authUser = user || null;
+  $('auth-form-view').hidden = Boolean(authUser);
+  const signedIn = $('auth-signed-in');
+  signedIn.hidden = !authUser;
+  signedIn.innerHTML = authUser ? `<strong>${escapeHtml(authUser.displayName || 'Signed in')}</strong><span>${escapeHtml(authUser.email || '')}</span>` : '';
+  updateSettingsAuth();
+}
+function setAuthMode(mode) {
+  authMode = mode;
+  $('auth-title').textContent = mode === 'signup' ? 'Create your account' : 'Your browser, your account';
+  $('email-submit').textContent = mode === 'signup' ? 'Create account' : 'Log in';
+  $('auth-mode-toggle').innerHTML = mode === 'signup' ? 'Already have an account? <strong>Log in</strong>' : 'New to MantraAI? <strong>Create an account</strong>';
+  $('auth-password').autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
+  showAuthMessage('');
+}
+function setAuthBusy(busy) {
+  authBusy = busy;
+  $('google-sign-in').disabled = busy;
+  $('email-submit').disabled = busy;
+  $('auth-mode-toggle').disabled = busy;
+  $('auth-email').disabled = busy;
+  $('auth-password').disabled = busy;
+  $('email-submit').textContent = busy ? 'Please wait…' : (authMode === 'signup' ? 'Create account' : 'Log in');
+}
+function openAuth() {
+  $('auth-modal').hidden = false;
+  showAuthMessage(!authConfigured ? authConfigHint : '');
+  if (!authUser) $('auth-email').focus();
+}
+function closeAuth() { $('auth-modal').hidden = true; }
+async function performAuth(action) {
+  if (authBusy) return;
+  if (!authConfigured) { showAuthMessage(authConfigHint); return; }
+  setAuthBusy(true);
+  showAuthMessage('');
+  try {
+    const email = $('auth-email').value.trim();
+    const password = $('auth-password').value;
+    if (!email || !$('auth-email').checkValidity()) throw new Error('Enter a valid email address.');
+    if (!password || password.length < 6) throw new Error('Password must be at least 6 characters.');
+    const user = action === 'signup' ? await api.auth.signUp(email, password) : await api.auth.signIn(email, password);
+    renderAuth(user);
+    $('auth-password').value = '';
+    closeAuth();
+    toast(action === 'signup' ? 'Your account is ready' : 'Welcome back');
+  } catch (error) { showAuthMessage(error.message || 'Authentication failed. Please try again.'); }
+  finally { setAuthBusy(false); }
+}
 function navigate(value) {
   const address = String(value || '').trim();
   if (!address) return;
@@ -164,7 +417,7 @@ function navigate(value) {
   home.hidden = true; defaultHome.hidden = true; contentView.hidden = true; quickPanel.hidden = false;
   api.navigate(address);
 }
-function runSearch(value) { if (value?.trim()) navigate(`https://www.google.com/search?q=${encodeURIComponent(value.trim())}`); }
+function runSearch(value) { if (!value?.trim()) return; const query=value.trim();const engine=localStorage.getItem('mantra-search-engine')||'google';const urls={google:'https://www.google.com/search?q={searchTerms}',bing:'https://www.bing.com/search?q={searchTerms}',duckduckgo:'https://duckduckgo.com/?q={searchTerms}'};const template=engine==='custom'?localStorage.getItem('mantra-search-template'):urls[engine];if(!template){toast('Set a valid search engine in Settings first');return;}navigate(template.replace('{searchTerms}',encodeURIComponent(query))); }
 function toggleBookmark() {
   if (!activeUrl) { toast('Open a page to bookmark it'); return; }
   const found = bookmarks.findIndex((item) => item.url === activeUrl);
@@ -175,6 +428,7 @@ function toggleBookmark() {
   $('bookmark-toggle').textContent = saved ? '★' : '☆';
   $('bookmark-toggle').setAttribute('aria-pressed', String(saved));
   $('bookmark-toggle').title = saved ? 'Remove bookmark' : 'Bookmark this page';
+  if(contentView.dataset.panel==='bookmarks')renderCollection('bookmarks',contentView.querySelector('.collection-search')?.value||'');
 }
 function openFindBar() {
   $('page-find').hidden = false;
@@ -196,6 +450,8 @@ function closeFindBar() {
   api.stopFind();
 }
 
+renderHomeShortcuts();
+
 $('address-form').addEventListener('submit', (event) => { event.preventDefault(); navigate($('address').value); });
 $('back').addEventListener('click', () => api.back());
 $('forward').addEventListener('click', () => api.forward());
@@ -203,18 +459,65 @@ $('reload').addEventListener('click', () => api.reload());
 $('home-search').addEventListener('submit', (event) => { event.preventDefault(); runSearch($('home-query').value); });
 $('assistant-form').addEventListener('submit', (event) => { event.preventDefault(); const q = $('assistant-query').value.trim(); if (q) runSearch(q); });
 $('panel-toggle').addEventListener('click', () => setPanel(!panelOpen));
+$('auth-close').addEventListener('click', closeAuth);
+$('auth-modal').addEventListener('click', (event) => { if (event.target === $('auth-modal')) closeAuth(); });
+$('auth-mode-toggle').addEventListener('click', () => setAuthMode(authMode === 'login' ? 'signup' : 'login'));
+$('email-auth-form').addEventListener('submit', (event) => { event.preventDefault(); performAuth(authMode); });
+$('google-sign-in').addEventListener('click', async () => {
+  if (authBusy) return;
+  if (!authConfigured) { showAuthMessage(authConfigHint); return; }
+  if (!googleConfigured) { showAuthMessage(`Google sign-in is not configured. ${authConfigHint}`); return; }
+  setAuthBusy(true); showAuthMessage('Complete Google sign-in in your browser…');
+  try { const user = await api.auth.signInWithGoogle(); renderAuth(user); closeAuth(); toast('Welcome to MantraAI Browser'); }
+  catch (error) { showAuthMessage(error.message || 'Google sign-in failed. Please try again.'); }
+  finally { setAuthBusy(false); }
+});
+$('auth-modal').addEventListener('keydown', (event) => { if (event.key === 'Escape') closeAuth(); });
 $('panel-close').addEventListener('click', () => setPanel(false));
 $('new-tab').addEventListener('click', () => api.newTab());
 $('sidebar-new-tab').addEventListener('click', () => api.newTab());
 document.querySelectorAll('[data-panel]').forEach((button) => button.addEventListener('click', () => { if (button.closest('.toolbar-tools')) setPanel(true); updateContent(button.dataset.panel); }));
-document.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => {
+document.querySelectorAll('.assistant-shortcuts [data-action]').forEach((button) => button.addEventListener('click', () => {
   const action = button.dataset.action; const field = $('assistant-query');
   const prompts = {search:'Search the web for ',summarize:'Summarize ',write:'Help me write ',code:'Help me code '};
   field.value = prompts[action] || ''; field.focus();
 }));
 document.querySelectorAll('.trending-grid button').forEach((button) => button.addEventListener('click', () => runSearch(button.textContent.replace('⌕','').trim())));
-document.querySelectorAll('.favorites button[data-url]').forEach((button) => button.addEventListener('click', () => navigate(button.dataset.url)));
-$('add-favorite').addEventListener('click', () => { const url = prompt('Enter a website address'); if (url) navigate(url); });
+$('favorites').addEventListener('click', (event) => {
+  const menuToggle = event.target.closest('[data-shortcut-menu]');
+  if (menuToggle) {
+    const index = menuToggle.dataset.shortcutMenu;
+    const menu = $('favorites').querySelector(`[data-shortcut-menu-content="${index}"]`);
+    const willOpen = menu.hidden;
+    $('favorites').querySelectorAll('.shortcut-menu').forEach((item) => { item.hidden = true; });
+    $('favorites').querySelectorAll('.favorite-menu-toggle').forEach((item) => item.setAttribute('aria-expanded', 'false'));
+    menu.hidden = !willOpen;
+    menuToggle.setAttribute('aria-expanded', String(willOpen));
+    event.stopPropagation();
+    return;
+  }
+  const edit = event.target.closest('[data-shortcut-edit]');
+  if (edit) { openShortcutEditor(Number(edit.dataset.shortcutEdit)); return; }
+  const remove = event.target.closest('[data-shortcut-remove]');
+  if (remove) {
+    homeShortcuts.splice(Number(remove.dataset.shortcutRemove), 1);
+    saveHomeShortcuts();
+    return;
+  }
+  const open = event.target.closest('[data-shortcut-open]');
+  if (open) { const item = homeShortcuts[Number(open.dataset.shortcutOpen)]; if (item) navigate(item.url); return; }
+  if (event.target.closest('#add-favorite')) openShortcutEditor();
+});
+$('shortcut-editor-form').addEventListener('submit', saveShortcutEditor);
+$('shortcut-editor-close').addEventListener('click', closeShortcutEditor);
+$('shortcut-editor-cancel').addEventListener('click', closeShortcutEditor);
+$('shortcut-editor').addEventListener('click', (event) => { if (event.target === $('shortcut-editor')) closeShortcutEditor(); });
+$('shortcut-editor').addEventListener('keydown', (event) => { if (event.key === 'Escape') closeShortcutEditor(); });
+document.addEventListener('click', (event) => {
+  if (event.target.closest('#favorites')) return;
+  $('favorites').querySelectorAll('.shortcut-menu').forEach((item) => { item.hidden = true; });
+  $('favorites').querySelectorAll('.favorite-menu-toggle').forEach((item) => item.setAttribute('aria-expanded', 'false'));
+});
 $('incognito-button').addEventListener('click', () => api.openIncognito());
 $('desktop-button').addEventListener('click', () => { api.desktopSite(); toast('Desktop view enabled for the current page'); });
 $('bookmark-toggle').addEventListener('click', toggleBookmark);
@@ -229,6 +532,7 @@ api.onState((state) => {
   $('back').disabled = !state.canGoBack; $('forward').disabled = !state.canGoForward;
   if (state.url && state.url !== activeUrl) activeUrl = state.url;
   if (!state.url) activeUrl = '';
+  activeTitle=state.title||state.url||'New Tab';
   if (state.home) {
     const showVerse = Boolean(state.verseHome);
     home.hidden = showVerse;
@@ -239,7 +543,7 @@ api.onState((state) => {
     home.hidden = true; defaultHome.hidden = true;
   }
   if (state.url && !['chrome://','devtools://'].some((prefix) => state.url.startsWith(prefix))) {
-    historyItems = [{url:state.url,title:state.url,time:Date.now()}, ...historyItems.filter((item) => item.url !== state.url)].slice(0,80);
+    historyItems = [{url:state.url,title:state.title||state.url,time:Date.now()}, ...historyItems.filter((item) => item.url !== state.url)].slice(0,500);
     localStorage.setItem('mantra-history', JSON.stringify(historyItems));
   }
   const saved = bookmarks.some((item) => item.url === activeUrl);
@@ -247,7 +551,7 @@ api.onState((state) => {
   $('bookmark-toggle').setAttribute('aria-pressed', String(saved));
   $('bookmark-toggle').title = saved ? 'Remove bookmark' : 'Bookmark this page';
 });
-api.onTabs((state) => { tabs = state.tabs; activeTabId = state.activeId; renderTabs(); });
+api.onTabs((state) => { tabs = state.tabs; activeTabId = state.activeId; renderTabs(); if(contentView.dataset.panel==='openTabs')renderCollection('openTabs',contentView.querySelector('.collection-search')?.value||''); });
 api.onFindResult((result) => { $('find-count').textContent = result.matches ? `${result.activeMatchOrdinal} / ${result.matches}` : '0 / 0'; });
 api.onShortcut((action) => {
   if (action === 'new-tab') api.newTab();
@@ -259,13 +563,27 @@ api.onShortcut((action) => {
   else if (action === 'bookmark') toggleBookmark();
   else if (['history','downloads','settings'].includes(action)) { setPanel(true); updateContent(action); }
 });
-api.onDownloads((items) => { downloads = items; if (!contentView.hidden && document.querySelector('.content-view h2')?.textContent === 'Downloads') updateContent('downloads'); });
+api.onDownloads((items) => { downloads = items; if (!contentView.hidden && contentView.dataset.panel === 'downloads') renderCollection('downloads',contentView.querySelector('.collection-search')?.value||''); });
+api.getDownloads().then((items)=>{downloads=items;if(contentView.dataset.panel==='downloads')renderCollection('downloads',contentView.querySelector('.collection-search')?.value||'');}).catch(()=>{});
+api.auth.onState(renderAuth);
+api.auth.getState().then((state) => {
+  authConfigured = state.configured;
+  googleConfigured = state.googleConfigured;
+  authConfigHint = state.configHint || authConfigHint;
+  renderAuth(state.user);
+}).catch(() => {
+  showAuthMessage('Could not load account status. Restart MantraAI Browser and try again.');
+});
 
 document.querySelectorAll('.window-actions button').forEach((button,index) => button.addEventListener('click', () => api.windowAction(['minimize','maximize','close'][index])));
 document.addEventListener('keydown', (event) => {
+  if(event.key==='Escape'){
+    if(!$('page-find').hidden){closeFindBar();return;}
+    if(!$('auth-modal').hidden){closeAuth();return;}
+    if(panelOpen){setPanel(false);return;}
+  }
   const key=event.key.toLowerCase();
   const modifier=event.ctrlKey||event.metaKey;
-  if(event.key==='Escape'){if(!$('page-find').hidden)closeFindBar();else setPanel(false);}
   if(event.altKey&&key==='arrowleft'){event.preventDefault();api.back();}
   else if(event.altKey&&key==='arrowright'){event.preventDefault();api.forward();}
   else if(modifier&&event.shiftKey&&key==='n'){event.preventDefault();api.openIncognito();}
@@ -285,4 +603,4 @@ document.addEventListener('keydown', (event) => {
 document.body.classList.toggle('light-theme', localStorage.getItem('mantra-theme') === 'light');
 applyWallpaper(localStorage.getItem('mantra-wallpaper') || 'default');
 configureWallpaperRotation();
-setPanel(true);
+setPanel(false);
