@@ -7,22 +7,53 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="panel-closed">
+  <svg aria-hidden="true" focusable="false" class="icon-definitions">
+    <symbol id="icon-home" viewBox="0 0 24 24"><path fill="currentColor" d="M2.8 10.5 12 2.8l9.2 7.7v9.1a1.6 1.6 0 0 1-1.6 1.6h-5.2v-6.4H9.6v6.4H4.4a1.6 1.6 0 0 1-1.6-1.6z"/></symbol>
+    <symbol id="icon-chat" viewBox="0 0 24 24"><path d="M4 4.5h16v12H9l-5 4z"/><path d="M8 9h8M8 12.5h5"/></symbol>
+    <symbol id="icon-bookmark" viewBox="0 0 24 24"><path d="M6 4.5h12v16l-6-4-6 4z"/></symbol>
+    <symbol id="icon-history" viewBox="0 0 24 24"><path d="M3.8 11a8.3 8.3 0 1 1 .4 4.4"/><path d="M3 5.5V11h5.5M12 7v5l3.3 2"/></symbol>
+    <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 17v3h16v-3"/></symbol>
+    <symbol id="icon-extension" viewBox="0 0 24 24"><path d="M9 3.5h2.5v1a2.25 2.25 0 1 0 4.5 0v-1H19a1 1 0 0 1 1 1V9h-1a2.25 2.25 0 1 0 0 4.5h1V19a1 1 0 0 1-1 1h-4.5v-1a2.25 2.25 0 1 0-4.5 0v1H5a1 1 0 0 1-1-1v-5H3a2.25 2.25 0 1 1 0-4.5h1v-5a1 1 0 0 1 1-1h4z"/></symbol>
+    <symbol id="icon-settings" viewBox="0 0 24 24"><path d="m10 2-.6 2.2a8 8 0 0 0-1.8.8L5.5 4 3 6.5l1 2.1a8 8 0 0 0-.7 1.8L1 11v3l2.3.6a8 8 0 0 0 .8 1.8L3 18.5 5.5 21l2.1-1a8 8 0 0 0 1.8.7L10 23h3l.6-2.3a8 8 0 0 0 1.8-.8l2.1 1.1 2.5-2.5-1-2.1a8 8 0 0 0 .7-1.8L22 14v-3l-2.3-.6a8 8 0 0 0-.8-1.8L20 6.5 17.5 4l-2.1 1a8 8 0 0 0-1.8-.7L13 2z"/><circle cx="11.5" cy="12.5" r="3.1"/></symbol>
+    <symbol id="icon-bolt" viewBox="0 0 24 24"><path d="M13.5 2 5 13h6l-.5 9L19 10h-6z"/></symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="7.2"/><path d="m16.2 16.2 5 5"/></symbol>
+    <symbol id="icon-ai-mode" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 5 5"/><path d="m18.5 2 .9 2.6L22 5.5l-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9.9-2.6Z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="icon-new-tab" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><path d="M12 7.5v9M7.5 12h9"/></symbol>
+    <symbol id="icon-incognito" viewBox="0 0 24 24"><path d="M3 10.5h18M4.5 9.5 6.4 4a1.4 1.4 0 0 1 1.8-.9l2.5.8a4.2 4.2 0 0 0 2.6 0l2.5-.8a1.4 1.4 0 0 1 1.8.9l1.9 5.5"/><circle cx="7.5" cy="16" r="3.1"/><circle cx="16.5" cy="16" r="3.1"/><path d="M10.6 15h2.8"/></symbol>
+    <symbol id="icon-desktop" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M8 21h8m-4-4v4M7 8h10m-10 3h10m-10 3h6"/></symbol>
+    <symbol id="icon-note" viewBox="0 0 24 24"><path d="M5 3.5h14v17H5zM8 8h8M8 12h8M8 16h8"/></symbol>
+    <symbol id="icon-reading" viewBox="0 0 24 24"><path d="M3 5.5c3.3-1 6-.5 9 1v14c-3-1.5-5.7-2-9-1zM21 5.5c-3.3-1-6-.5-9 1v14c3-1.5 5.7-2 9-1z"/><path d="M6 9h3m-3 3h3m9-3h-3m3 3h-3"/></symbol>
+    <symbol id="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></symbol>
+    <symbol id="icon-moon" viewBox="0 0 24 24"><path d="M20.2 15.4A8.6 8.6 0 0 1 8.6 3.8 8.8 8.8 0 1 0 20.2 15.4Z"/></symbol>
+    <symbol id="icon-mantra-send" viewBox="0 0 48 48">
+      <defs>
+        <linearGradient id="mantra-send-bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#10264a"/><stop offset="1" stop-color="#061127"/></linearGradient>
+        <linearGradient id="mantra-send-frame" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffe27b"/><stop offset=".5" stop-color="#edaa2d"/><stop offset="1" stop-color="#a95c13"/></linearGradient>
+        <linearGradient id="mantra-send-plane" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff184"/><stop offset=".5" stop-color="#ffc83e"/><stop offset="1" stop-color="#e58a16"/></linearGradient>
+      </defs>
+      <rect x="2" y="2" width="44" height="44" rx="12" fill="var(--mantra-send-tile, url(#mantra-send-bg))" stroke="var(--mantra-send-edge, url(#mantra-send-frame))" stroke-width="2"/>
+      <path d="m9.4 22.3 27-11.1c1.1-.5 2.2.6 1.7 1.7L27 39.3c-.5 1.1-2.1 1-2.5-.2L20.9 28 9.6 24.8c-1.2-.4-1.3-2-.2-2.5Z" fill="url(#mantra-send-plane)"/>
+      <path d="m11.3 23.1 23.2-9.5-12.4 13.1m-1.2 1.3 2.9 8.2" fill="none" stroke="#725019" stroke-opacity=".75" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="m11.3 23.1 23.2-9.5-12.4 13.1" fill="none" stroke="#fff1a3" stroke-width=".8" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </svg>
   <header class="chrome">
     <div class="topline">
       <div class="app-mark" aria-label="MantraAI Browser"><img class="brand-image" src="assets/mantraai-logo-transparent.png" alt="MantraAI logo"></div>
       <div class="app-name">MantraAI Browser</div>
-      <div id="tab-strip" class="tabs"></div><button id="new-tab" class="new-tab" title="New tab">+</button>
-      <div class="window-actions"><button aria-label="Minimize">−</button><button aria-label="Maximize">□</button><button aria-label="Close">×</button></div>
+      <div id="tab-strip" class="tabs"></div><button id="new-tab" class="new-tab" title="New tab"><svg class="ui-icon icon-new-tab"><use href="#icon-new-tab"></use></svg></button>
+      <div class="window-actions"><button aria-label="Minimize" title="Minimize">−</button><button aria-label="Maximize" title="Maximize">□</button><button aria-label="Close" title="Close">×</button></div>
     </div>
     <div class="toolbar">
-      <div class="navigation"><button id="back" title="Back" disabled>‹</button><button id="forward" title="Forward" disabled>›</button><button id="reload" title="Reload">⟳</button></div>
-      <form id="address-form" class="address-form"><span class="search-icon">⌕</span><input id="address" placeholder="Search or type a URL" autocomplete="off"><button type="submit" aria-label="Go">→</button></form>
-      <div class="toolbar-tools"><button id="bookmark-toggle" title="Bookmark this page" aria-label="Bookmark this page" aria-pressed="false">☆</button><button data-panel="downloads" title="Downloads" aria-label="Downloads">↓</button><button data-panel="history" title="History" aria-label="History">◷</button><button data-panel="settings" title="Settings" aria-label="Settings">⚙</button></div>
+      <div class="navigation"><button id="back" title="Back" aria-label="Back" disabled><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 4.5A9 9 0 1 0 20.5 12"/><path d="M20.5 12H8m0 0 4-4m-4 4 4 4"/></svg></button><button id="forward" title="Forward" aria-label="Forward" disabled><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(24 0) scale(-1 1)"><path d="M17 4.5A9 9 0 1 0 20.5 12"/><path d="M20.5 12H8m0 0 4-4m-4 4 4 4"/></g></svg></button><button id="reload" title="Reload">⟳</button></div>
+      <form id="address-form" class="address-form"><span class="search-icon"><svg><use href="#icon-search"></use></svg></span><input id="address" placeholder="Search or type a URL" autocomplete="off"><button class="ai-mode-button" type="submit" aria-label="Go with MantraAI Mode" title="Go with MantraAI Mode"><svg class="ai-mode-icon" aria-hidden="true"><use href="#icon-ai-mode"></use></svg><span>MantraAI Mode</span></button></form>
+      <div class="toolbar-tools"><button id="bookmark-toggle" title="Bookmark this page" aria-label="Bookmark this page" aria-pressed="false"><svg class="ui-icon icon-bookmark"><use href="#icon-bookmark"></use></svg></button><button data-panel="downloads" title="Downloads" aria-label="Downloads"><svg class="ui-icon icon-download"><use href="#icon-download"></use></svg></button><button data-panel="history" title="History" aria-label="History"><svg class="ui-icon icon-history"><use href="#icon-history"></use></svg></button><button data-panel="settings" title="Settings" aria-label="Settings"><svg class="ui-icon icon-settings"><use href="#icon-settings"></use></svg></button></div>
+      <button id="account-greeting" class="account-greeting" type="button" aria-label="Account" title="Account" hidden><span class="account-avatar"><img id="account-avatar-image" alt="" hidden><span id="account-avatar-initial">?</span></span><span>Hi, <strong id="account-greeting-name"></strong></span></button>
       <button id="panel-toggle" class="om-toggle" aria-label="Toggle Sidebar" title="Open Sidebar" aria-expanded="false">
         <svg class="leaf-menu-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path d="M3 5.5c5.2 0 7.1-1.5 10-1.5s4.2 1.5 8 1.5c-3.8 0-5.1 1.5-8 1.5S8.2 5.5 3 5.5Z" />
-          <path d="M3 12c5.2 0 7.1-1.5 10-1.5s4.2 1.5 8 1.5c-3.8 0-5.1 1.5-8 1.5S8.2 12 3 12Z" />
-          <path d="M3 18.5c5.2 0 7.1-1.5 10-1.5s4.2 1.5 8 1.5c-3.8 0-5.1 1.5-8 1.5S8.2 18.5 3 18.5Z" />
+          <circle cx="12" cy="5" r="1.7" />
+          <circle cx="12" cy="12" r="1.7" />
+          <circle cx="12" cy="19" r="1.7" />
         </svg>
       </button>
     </div>
@@ -34,7 +65,7 @@
       <img class="hero-logo" src="assets/mantraai-logo-transparent.png" alt="MantraAI">
       <div class="browser-label">B r o w s e r</div>
       <div class="motto"><span></span>Search <b>•</b> Explore <b>•</b> Create <b>•</b> Grow<span></span></div>
-      <form id="home-search" class="home-search"><span>⌕</span><input id="home-query" placeholder="Search the web..."><button type="submit" aria-label="Ask MantraAI">✦</button></form>
+      <form id="home-search" class="home-search"><span><svg class="ui-icon icon-search"><use href="#icon-search"></use></svg></span><input id="home-query" placeholder="Search the web..." autocomplete="off"><button id="home-search-submit" class="ai-mode-button" type="submit" aria-label="Search with MantraAI Mode" title="Search with MantraAI Mode"><svg class="ai-mode-icon" aria-hidden="true"><use href="#icon-ai-mode"></use></svg><span>MantraAI Mode</span></button></form>
       <div class="favorites" id="favorites">
       </div>
       <section class="trending"><div class="trending-title"><span>♨</span> Trending Today</div><div class="trending-grid">
@@ -85,27 +116,32 @@
   </main>
 
   <aside id="assistant-panel" class="assistant-panel">
-    <div class="panel-head"><div class="panel-logo"><img class="brand-image" src="assets/mantraai-logo-transparent.png" alt="MantraAI logo"></div><div class="panel-title"><strong>Mantra<span>AI</span></strong><small>Assistant</small></div><button id="panel-close" aria-label="Close panel">×</button></div>
-    <form id="assistant-form" class="assistant-input"><input id="assistant-query" placeholder="Ask anything..." autocomplete="off"><button type="submit" aria-label="Search the web">➤</button></form>
-    <div class="assistant-shortcuts"><button data-action="search"><span>⌕</span>Web Search</button><button data-action="summarize"><span>▤</span>Summarize</button><button data-action="write"><span>♢</span>Write</button><button data-action="code"><span>&lt;/&gt;</span>Code</button></div>
+    <div class="panel-head"><div class="panel-logo"><img class="brand-image" src="assets/mantraai-logo-transparent.png" alt="MantraAI logo"></div><div class="panel-title"><strong>Mantra<span>AI</span></strong><small>Browser</small></div><button id="panel-view-back" class="panel-view-back" type="button" aria-label="Close current view and return to sidebar home" title="Close current view" disabled><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M16 12H7m0 0 4-4m-4 4 4 4"/></svg></button><button id="panel-close" aria-label="Close panel" title="Close sidebar">×</button></div>
     <div id="panel-content">
       <div class="side-nav">
-        <button class="side-item" id="sidebar-new-tab"><span class="side-icon">＋</span>New Tab</button>
-        <button class="side-item selected" data-panel="home"><span class="side-icon">⌂</span>Home</button>
-        <button class="side-item" data-panel="chat"><span class="side-icon">▢</span>Chat</button>
-        <button class="side-item" data-panel="bookmarks"><span class="side-icon">♧</span>Bookmarks</button>
-        <button class="side-item" data-panel="history"><span class="side-icon">◷</span>History</button>
-        <button class="side-item" data-panel="downloads"><span class="side-icon">↓</span>Downloads</button>
-        <button class="side-item" data-panel="extensions"><span class="side-icon">✣</span>Extensions</button>
-        <button class="side-item" data-panel="settings"><span class="side-icon">⚙</span>Settings</button>
-        <button class="side-item" id="incognito-button"><span class="side-icon">◉</span>New Incognito Window</button>
-        <button class="side-item" id="desktop-button"><span class="side-icon">▣</span>Desktop Site</button>
+        <button class="side-item" id="sidebar-new-tab"><span class="side-icon icon-new-tab"><svg><use href="#icon-new-tab"></use></svg></span>New Tab</button>
+        <button class="side-item selected" data-panel="home"><span class="side-icon icon-home"><svg><use href="#icon-home"></use></svg></span>Home</button>
+        <button class="side-item" data-panel="chat"><span class="side-icon icon-chat"><svg><use href="#icon-chat"></use></svg></span>Chat</button>
+        <button class="side-item" data-panel="bookmarks"><span class="side-icon icon-bookmark"><svg><use href="#icon-bookmark"></use></svg></span>Bookmarks</button>
+        <button class="side-item" data-panel="history"><span class="side-icon icon-history"><svg><use href="#icon-history"></use></svg></span>History</button>
+        <button class="side-item" data-panel="downloads"><span class="side-icon icon-download"><svg><use href="#icon-download"></use></svg></span>Downloads</button>
+        <button class="side-item" data-panel="extensions"><span class="side-icon icon-extension"><svg><use href="#icon-extension"></use></svg></span>Extensions</button>
+        <button class="side-item" data-panel="settings"><span class="side-icon icon-settings"><svg><use href="#icon-settings"></use></svg></span>Settings</button>
+        <button class="side-item" id="incognito-button"><span class="side-icon icon-incognito"><svg><use href="#icon-incognito"></use></svg></span>New Incognito Window</button>
+        <button class="side-item" id="desktop-button"><span class="side-icon icon-desktop"><svg><use href="#icon-desktop"></use></svg></span>Desktop Site</button>
+        <button class="side-item" id="theme-toggle" type="button" aria-label="Switch to Light Theme" title="Switch to Light Theme"><span class="side-icon icon-theme"><svg><use href="#icon-sun"></use></svg></span><span id="theme-toggle-label">Light Theme</span></button>
       </div>
-      <div class="quick-access"><div class="quick-title"><span>ϟ</span> Quick Access</div>
-        <button class="side-item" data-panel="chat"><span class="side-icon gold-icon">▣</span>MantraAI Chat</button>
-        <button class="side-item" data-panel="notes"><span class="side-icon gold-icon">▤</span>Notes</button>
-        <button class="side-item" data-panel="reading"><span class="side-icon gold-icon">▤</span>Reading List</button>
+      <div class="quick-access"><div class="quick-title"><span class="icon-bolt"><svg><use href="#icon-bolt"></use></svg></span> Quick Access</div>
+        <button class="side-item" data-panel="chat"><span class="side-icon icon-chat gold-icon"><svg><use href="#icon-chat"></use></svg></span>MantraAI Chat</button>
+        <button class="side-item" data-panel="notes"><span class="side-icon gold-icon"><svg><use href="#icon-note"></use></svg></span>Notes</button>
+        <button class="side-item" data-panel="reading"><span class="side-icon gold-icon"><svg><use href="#icon-reading"></use></svg></span>Reading List</button>
       </div>
+      <section id="sidebar-account-card" class="sidebar-account-card" aria-label="Account" hidden>
+        <strong>Account</strong>
+        <span class="sidebar-account-status">Not signed in</span>
+        <p>Sign in is optional. Browsing works without an account.</p>
+        <button id="sidebar-auth-action" type="button">Sign in or add an account</button>
+      </section>
       <div class="panel-quote"><span class="quote-ornament">───── ❀ ─────</span><em>Better Thoughts<br>Create a Better<br>Tomorrow</em><span class="quote-ornament">──── ❀ ────</span></div>
     </div>
     <section id="content-view" class="content-view" hidden></section>
@@ -602,7 +638,7 @@
         </div>
         <form id="assistant-modal-form" class="assistant-modal-input-bar">
           <input id="assistant-modal-query" placeholder="Ask MantraAI Assistant..." autocomplete="off">
-          <button type="submit" aria-label="Send">➤</button>
+          <button type="submit" aria-label="Send" title="Send"><svg class="send-mark"><use href="#icon-mantra-send"></use></svg></button>
         </form>
       </div>
     </div>
@@ -733,9 +769,12 @@
           <input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" required>
           <label for="auth-password">Password</label>
           <input id="auth-password" type="password" autocomplete="current-password" placeholder="At least 6 characters" minlength="6" required>
-          <button id="email-submit" class="auth-submit" type="submit">Log in</button>
+          <div id="auth-form-actions" class="auth-form-actions">
+            <button id="auth-forgot-password" class="auth-forgot-password" type="button">Forgot password?</button>
+            <button id="email-submit" class="auth-submit" type="submit">Log in</button>
+            <button id="auth-mode-toggle" class="auth-mode-toggle" type="button">Create an account</button>
+          </div>
         </form>
-        <button id="auth-mode-toggle" class="auth-mode-toggle" type="button">New to MantraAI? <strong>Create an account</strong></button>
       </div>
       <p id="auth-message" class="auth-message" role="status" aria-live="polite"></p>
     </section>

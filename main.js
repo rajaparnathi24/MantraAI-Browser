@@ -1,11 +1,26 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, session, dialog, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, session, dialog, shell, safeStorage, nativeTheme } = require('electron');
 const fs = require('fs');
 const http = require('http');
 const crypto = require('crypto');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
+// Keep disposable Chromium caches outside the roaming browser profile. This
+// avoids cache rotation/locking issues without moving cookies or other state.
+if (process.platform === 'win32') {
+  try {
+    const cacheRoot = path.join(process.env.LOCALAPPDATA || app.getPath('temp'), 'MantraAI Browser', 'ChromiumCache');
+    const httpCachePath = path.join(cacheRoot, 'Http');
+    fs.mkdirSync(httpCachePath, { recursive:true });
+    app.commandLine.appendSwitch('disk-cache-dir', httpCachePath);
+    app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+  } catch (error) {
+    console.warn('Could not configure the local Chromium cache; using Electron defaults:', error.message);
+  }
+}
+
 let win;
+let browserColorScheme = 'dark';
 let tabs = [];
 let closedTabs = [];
 let activeTabId = null;
@@ -219,7 +234,7 @@ function googleDesktopSignIn() {
       if (!code) { response.writeHead(400).end('Google sign-in was cancelled. You can close this tab.'); finish(new Error('OAUTH_CANCELLED')); return; }
       callbackAccepted = true;
       response.writeHead(200, {'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});
-      response.end('<!doctype html><title>MantraAI Browser</title><p style="font:16px Segoe UI,Arial;color:#142033">Sign-in complete. Returning to MantraAI Browser…</p>');
+      response.end('<!doctype html><title>MantraAI Browser</title><p style="font:16px Segoe UI,Arial;color:#142033">Google authorization received. Finishing sign-in…</p>');
       try {
         const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
           method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
@@ -274,7 +289,7 @@ function publishTabs() {
   if (!win) return;
   win.webContents.send('browser:tabs', {
     activeId: activeTabId,
-    tabs: tabs.filter((tab) => !tab.verseHome).map(({ id, title, url, home }) => ({ id, title: title || 'New Tab', url: home ? '' : url, home }))
+    tabs: tabs.filter((tab) => !tab.verseHome).map(({ id, title, url, home, favicon }) => ({ id, title: title || 'New Tab', url: home ? '' : url, home, favicon: home ? '' : favicon || '' }))
   });
 }
 
@@ -286,6 +301,7 @@ function sendState() {
     tabId: tab.id,
     title:tab.title || 'New Tab',
     url: tab.home ? '' : tab.view.webContents.getURL(),
+    favicon: tab.home ? '' : tab.favicon || '',
     canGoBack: !tab.home && history.canGoBack(),
     canGoForward: !tab.home && history.canGoForward(),
     loading: !tab.home && tab.view.webContents.isLoading(),
@@ -325,18 +341,29 @@ function createTab({ url = null, activate = true, verseHome = false } = {}) {
   }
   const id = nextTabId++;
   const view = new WebContentsView({ webPreferences:{ contextIsolation:true, nodeIntegration:false, sandbox:true } });
-  const tab = { id, view, title:'New Tab', url:'', home:true, verseHome:Boolean(verseHome), desktopSite:false };
+  applyTabColorScheme(view.webContents);
+  const tab = { id, view, title:'New Tab', url:'', favicon:'', home:true, verseHome:Boolean(verseHome), desktopSite:false };
   tabs.push(tab);
   win.contentView.addChildView(view);
   view.webContents.on('page-title-updated',(_event,title)=>{ tab.title=title || tab.url || 'New Tab'; publishTabs(); if(activeTabId===tab.id)sendState(); });
+  view.webContents.on('page-favicon-updated',(_event,favicons)=>{
+    const favicon=(Array.isArray(favicons)?favicons:[]).find((candidate)=>{
+      try { return ['http:','https:'].includes(new URL(candidate).protocol); } catch { return false; }
+    });
+    tab.favicon=favicon || '';
+    publishTabs();
+    if(activeTabId===tab.id)sendState();
+  });
   for (const event of ['did-navigate','did-navigate-in-page']) {
     view.webContents.on(event,(_event,url)=>{ tab.url=url || view.webContents.getURL();tab.home=false;tab.verseHome=false;sendState(); });
   }
   for (const event of ['did-start-loading','did-stop-loading']) view.webContents.on(event,sendState);
   view.webContents.on('did-finish-load',()=>{
+    applyTabColorScheme(view.webContents);
     view.webContents.insertCSS('::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}').catch(()=>{});
     sendState();
   });
+  view.webContents.on('devtools-closed',()=>applyTabColorScheme(view.webContents));
   view.webContents.on('before-input-event',(event,input)=>browserShortcut(tab,event,input));
   view.webContents.on('will-navigate',(event,target)=>{
     try { const protocol=new URL(target).protocol; if(protocol!=='http:'&&protocol!=='https:')event.preventDefault(); }
@@ -363,6 +390,19 @@ function createTab({ url = null, activate = true, verseHome = false } = {}) {
   return tab;
 }
 
+function applyTabColorScheme(webContents) {
+  if (!webContents || webContents.isDestroyed()) return;
+  const protocol = webContents.debugger;
+  try {
+    if (!protocol.isAttached()) protocol.attach('1.3');
+    protocol.sendCommand('Emulation.setEmulatedMedia', {
+      features:[{name:'prefers-color-scheme',value:browserColorScheme}]
+    }).catch((error)=>console.warn('Could not sync the tab color scheme:',error.message));
+  } catch (error) {
+    console.warn('Could not sync the tab color scheme:',error.message);
+  }
+}
+
 function navigateTab(tab, address) {
   const url=normalizeAddress(address);
   if (!url || !tab) return;
@@ -370,6 +410,7 @@ function navigateTab(tab, address) {
   tab.verseHome=false;
   tab.url=url;
   tab.title=url;
+  tab.favicon='';
   resizeBrowser();
   publishTabs();
   tab.view.webContents.loadURL(url).catch((error)=>console.error(error));
@@ -410,6 +451,7 @@ function createWindow() {
   win = new BrowserWindow({
     width:1536, height:1024, minWidth:760, minHeight:560,
     title:'MantraAI Browser', titleBarStyle:'hidden', backgroundColor:'#080f1b',
+    ...(process.platform === 'win32' ? { titleBarOverlay:{color:'#0d1825',symbolColor:'#d9e0e8',height:48} } : {}),
     icon:path.join(__dirname,'assets','mantraai-logo-transparent.png'),
     webPreferences:{ preload:path.join(__dirname,'preload.js'), contextIsolation:true, nodeIntegration:false, sandbox:true }
   });
@@ -474,6 +516,15 @@ ipcMain.on('browser:window-action',(_event,action)=>{
   if(action==='minimize')win.minimize();
   else if(action==='maximize')win.isMaximized()?win.unmaximize():win.maximize();
   else if(action==='close')win.close();
+});
+ipcMain.on('browser:window-theme',(_event,theme)=>{
+  const light = theme === 'light';
+  browserColorScheme = light ? 'light' : 'dark';
+  nativeTheme.themeSource = light ? 'light' : 'dark';
+  for (const tab of tabs) applyTabColorScheme(tab.view.webContents);
+  if (win && !win.isDestroyed() && process.platform === 'win32') {
+    win.setTitleBarOverlay({color:light?'#f5f7fa':'#0d1825',symbolColor:light?'#303c4b':'#d9e0e8'});
+  }
 });
 ipcMain.on('browser:incognito',()=>{
   const privateSession=session.fromPartition(`incognito-${Date.now()}`,{cache:false});
@@ -637,6 +688,14 @@ ipcMain.handle('auth:sign-in', async (event, email, password) => {
   if (!isTrustedAuthSender(event)) throw new Error('Unauthorized');
   try { return await setAuthSession(await firebaseRequest('accounts:signInWithPassword',{email,password,returnSecureToken:true})); }
   catch (error) { throw new Error(authErrorMessage(error)); }
+});
+ipcMain.handle('auth:reset-password', async (event, email) => {
+  if (!isTrustedAuthSender(event)) throw new Error('Unauthorized');
+  if (typeof email !== 'string' || !email.trim()) throw new Error('INVALID_EMAIL');
+  try {
+    await firebaseRequest('accounts:sendOobCode',{requestType:'PASSWORD_RESET',email:email.trim()});
+    return true;
+  } catch (error) { throw new Error(authErrorMessage(error)); }
 });
 ipcMain.handle('auth:google', async (event) => {
   if (!isTrustedAuthSender(event)) throw new Error('Unauthorized');

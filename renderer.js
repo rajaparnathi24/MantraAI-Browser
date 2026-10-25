@@ -65,6 +65,42 @@ function loadHomeShortcuts() {
 
 let homeShortcuts = loadHomeShortcuts();
 
+function getFaviconCandidates(url, preferred = '') {
+  try {
+    const pageUrl = new URL(url);
+    if (!['http:', 'https:'].includes(pageUrl.protocol)) return preferred ? [preferred] : [];
+    return [...new Set([
+      preferred,
+      new URL('/favicon.ico', pageUrl.origin).href,
+      `https://www.google.com/s2/favicons?domain=${encodeURIComponent(pageUrl.hostname)}&sz=64`
+    ].filter(Boolean))];
+  } catch { return preferred ? [preferred] : []; }
+}
+
+function getLearnedFavicon(url) {
+  try {
+    const origin = new URL(url).origin;
+    const candidates = [
+      ...historyItems.map((item) => ({ url: item.url, favicon: item.favicon })),
+      ...tabs.map((tab) => ({ url: tab.url, favicon: tab.favicon }))
+    ];
+    return candidates.find((item) => {
+      if (!item.favicon) return false;
+      try { return new URL(item.url).origin === origin; } catch { return false; }
+    })?.favicon || '';
+  } catch { return ''; }
+}
+
+function bindFaviconFallbacks(root, selector, onExhausted) {
+  root.querySelectorAll(selector).forEach((image) => {
+    let fallbacks = JSON.parse(image.dataset.fallbacks || '[]');
+    image.addEventListener('error', () => {
+      if (fallbacks.length) { image.src = fallbacks.shift(); return; }
+      onExhausted(image);
+    });
+  });
+}
+
 function saveHomeShortcuts() {
   localStorage.setItem('mantra-home-shortcuts', JSON.stringify(homeShortcuts));
   renderHomeShortcuts();
@@ -73,18 +109,18 @@ function saveHomeShortcuts() {
 function renderHomeShortcuts() {
   const host = $('favorites');
   host.innerHTML = homeShortcuts.map((item, index) => {
-    const hostname = new URL(item.url).hostname;
-    const favicon = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=64`;
+    const favicons = getFaviconCandidates(item.url, getLearnedFavicon(item.url));
+    const favicon = favicons.shift() || 'data:,';
     return `<div class="favorite-card" data-shortcut-card="${index}">
-      <button class="favorite-open" type="button" data-shortcut-open="${index}" title="Open ${escapeAttr(item.name)}" aria-label="Open ${escapeAttr(item.name)}"><img class="favorite-icon" src="${favicon}" alt=""><span>${escapeHtml(item.name)}</span></button>
+      <button class="favorite-open" type="button" data-shortcut-open="${index}" title="Open ${escapeAttr(item.name)}" aria-label="Open ${escapeAttr(item.name)}"><img class="favorite-icon" src="${escapeAttr(favicon)}" data-fallbacks="${escapeAttr(JSON.stringify(favicons))}" alt=""><span>${escapeHtml(item.name)}</span></button>
       <button class="favorite-menu-toggle" type="button" data-shortcut-menu="${index}" aria-label="Options for ${escapeAttr(item.name)}" aria-expanded="false" title="Shortcut options">⋮</button>
       <div class="shortcut-menu" data-shortcut-menu-content="${index}" role="menu" hidden><button type="button" role="menuitem" data-shortcut-edit="${index}">Edit shortcut</button><button type="button" role="menuitem" data-shortcut-remove="${index}">Remove shortcut</button></div>
     </div>`;
   }).join('') + `<div class="favorite-card add-favorite-card"><button id="add-favorite" class="favorite-open" type="button" aria-label="Add a shortcut"><span class="favorite-icon add">+</span><span>Add</span></button></div>`;
 
-  host.querySelectorAll('.favorite-icon[src]').forEach((image) => image.addEventListener('error', () => {
+  bindFaviconFallbacks(host, '.favorite-icon[src]', (image) => {
     image.replaceWith(Object.assign(document.createElement('span'), { className: 'favorite-icon favorite-fallback', textContent: '✦', ariaHidden: 'true' }));
-  }, { once: true }));
+  });
 }
 
 let shortcutEditIndex = null;
@@ -130,7 +166,21 @@ function saveShortcutEditor(event) {
 function renderTabs() {
   const strip = $('tab-strip');
   strip.classList.toggle('empty', tabs.length === 0);
-  strip.innerHTML = tabs.map((tab) => `<div class="tab${tab.id === activeTabId ? ' active' : ''}" data-tab-id="${tab.id}" title="${escapeAttr(tab.title)}"><span class="tab-favicon">${tab.home ? '<img src="assets/mantraai-logo-transparent.png" alt="">' : '◉'}</span><span class="tab-title">${escapeHtml(tab.title || 'New Tab')}</span><button class="tab-close" data-close-tab="${tab.id}" aria-label="Close tab">×</button></div>`).join('');
+  strip.innerHTML = tabs.map((tab) => {
+    let fallback = '✦';
+    try { if (tab.url) fallback = new URL(tab.url).hostname.replace(/^www\./i, '').charAt(0).toUpperCase() || fallback; } catch {}
+    const isMantraAITab = tab.home || /mantraai/i.test(tab.title || '') || /^file:/i.test(tab.url || '');
+    const favicons = isMantraAITab ? [] : getFaviconCandidates(tab.url, tab.favicon);
+    const favicon = favicons.shift();
+    const icon = isMantraAITab
+      ? '<img src="assets/mantraai-logo-transparent.png" alt="">'
+      : `<span class="tab-favicon-fallback"${favicon ? ' hidden' : ''} aria-hidden="true">${escapeHtml(fallback)}</span>${favicon ? `<img class="tab-site-icon" src="${escapeAttr(favicon)}" data-fallbacks="${escapeAttr(JSON.stringify(favicons))}" alt="" aria-hidden="true">` : ''}`;
+    return `<div class="tab${tab.id === activeTabId ? ' active' : ''}" data-tab-id="${tab.id}" title="${escapeAttr(tab.title)}"><span class="tab-favicon">${icon}</span><span class="tab-title">${escapeHtml(tab.title || 'New Tab')}</span><button class="tab-close" data-close-tab="${tab.id}" aria-label="Close tab">×</button></div>`;
+  }).join('');
+  bindFaviconFallbacks(strip, '.tab-site-icon', (image) => {
+    image.hidden = true;
+    image.parentElement.querySelector('.tab-favicon-fallback').hidden = false;
+  });
   strip.querySelectorAll('.tab[data-tab-id]').forEach((button) => button.addEventListener('click', (event) => {
     if (event.target.closest('[data-close-tab]')) return;
     api.selectTab(Number(button.dataset.tabId));
@@ -151,9 +201,31 @@ function setPanel(open) {
   api.setPanelOpen(open);
 }
 
+function applyTheme(value) {
+  const theme = value === 'light' ? 'light' : 'dark';
+  document.body.classList.toggle('light-theme', theme === 'light');
+  document.body.classList.toggle('native-window-controls', api.platform === 'win32');
+  localStorage.setItem('mantra-theme', theme);
+  api.setWindowTheme(theme);
+
+  const selector = contentView.querySelector('#theme-select');
+  if (selector && selector.value !== theme) selector.value = theme;
+
+  const toggle = $('theme-toggle');
+  if (toggle) {
+    const label = theme === 'dark' ? 'Light Theme' : 'Dark Theme';
+    toggle.querySelector('use')?.setAttribute('href', theme === 'dark' ? '#icon-sun' : '#icon-moon');
+    $('theme-toggle-label').textContent = label;
+    toggle.setAttribute('aria-label', `Switch to ${label}`);
+    toggle.setAttribute('title', `Switch to ${label}`);
+    toggle.setAttribute('aria-pressed', String(theme === 'light'));
+  }
+}
+
 function showHome() {
   home.hidden = false;
   defaultHome.hidden = true;
+  $('panel-view-back').disabled = true;
   home.scrollTo({top:0,behavior:'smooth'});
   $('panel-content').scrollTo({top:0});
   contentView.scrollTo({top:0});
@@ -171,6 +243,7 @@ function selectSideItem(name) {
 
 function updateContent(name) {
   if (name === 'home') { showHome(); return; }
+  $('panel-view-back').disabled = false;
   $('panel-content').scrollTo({top:0});
   contentView.scrollTo({top:0});
   home.hidden = false;
@@ -203,7 +276,7 @@ function updateContent(name) {
     });
     const theme = contentView.querySelector('#theme-select');
     theme.value = localStorage.getItem('mantra-theme') || 'dark';
-    theme.addEventListener('change', () => { document.body.classList.toggle('light-theme', theme.value === 'light'); localStorage.setItem('mantra-theme', theme.value); });
+    theme.addEventListener('change', () => applyTheme(theme.value));
     const wallpaper = contentView.querySelector('#wallpaper-select');
     wallpaper.value = localStorage.getItem('mantra-wallpaper') || 'default';
     contentView.querySelector('#wallpaper-rotate').checked = localStorage.getItem('mantra-rotate-wallpaper') === 'true';
@@ -265,12 +338,43 @@ function renderCollection(name, query) {
   host.innerHTML = items.map((item)=>{
     if(name==='openTabs') return `<div class="collection-entry ${item.id===activeTabId?'entry-active':''}"><button class="entry-open" data-tab-open="${item.id}">${item.id===activeTabId?'●':'○'} ${escapeHtml(item.title||'New Tab')}<small>${escapeHtml(item.url||'New Tab')}${item.group?` · ${escapeHtml(item.group)}`:''}</small></button><select data-tab-group="${item.id}" aria-label="Tab group"><option value="">No group</option>${tabGroups.map((g)=>`<option value="${escapeAttr(g.id)}" ${g.tabs.includes(item.id)?'selected':''}>${escapeHtml(g.name)}</option>`).join('')}</select><button data-tab-close="${item.id}" aria-label="Close tab">×</button></div>`;
     if(name==='bookmarks') return `<div class="collection-entry"><button class="entry-open" data-open-url="${escapeAttr(item.url)}">☆ ${escapeHtml(item.title||item.url)}<small>${escapeHtml(item.url)}</small></button><button data-bookmark-edit="${escapeAttr(item.url)}">Edit</button><button data-bookmark-delete="${escapeAttr(item.url)}">×</button></div>`;
-    if(name==='history') return `<div class="collection-entry"><button class="entry-open" data-open-url="${escapeAttr(item.url)}">◷ ${escapeHtml(item.title||item.url)}<small>${escapeHtml(item.url)} · ${new Date(item.time||Date.now()).toLocaleString()}</small></button><button data-history-delete="${escapeAttr(item.url)}" aria-label="Remove history item">×</button></div>`;
+    if(name==='history') {
+      let hostName = '';
+      try {
+        const pageUrl = new URL(item.url);
+        hostName = pageUrl.hostname.replace(/^www\./i,'');
+      }
+      catch { hostName = item.url || ''; }
+      const isMantraAIPage = /mantraai/i.test(item.title || '') || /^file:/i.test(item.url || '');
+      const iconCandidates = isMantraAIPage ? ['assets/mantraai-logo-transparent.png'] : getFaviconCandidates(item.url, item.favicon);
+      const iconUrl = iconCandidates.shift() || 'data:,';
+      const initial = (hostName[0] || '?').toUpperCase();
+      const siteName = historySiteName(hostName,item.title);
+      return `<div class="collection-entry history-entry"><button class="entry-open history-open" data-open-url="${escapeAttr(item.url)}" aria-label="Open ${escapeAttr(siteName)}"><span class="history-site-icon"><img src="${escapeAttr(iconUrl)}" data-fallbacks="${escapeAttr(JSON.stringify(iconCandidates))}" alt="" loading="lazy"><span hidden>${escapeHtml(initial)}</span></span><span class="history-entry-body"><strong class="history-entry-title">${escapeHtml(siteName)}</strong><small class="history-entry-meta">${new Date(item.time||Date.now()).toLocaleString()}</small></span></button><button data-history-delete="${escapeAttr(item.url)}" aria-label="Remove history item">×</button></div>`;
+    }
     if(name==='downloads') { const percent=item.total?Math.min(100,Math.round(item.received/item.total*100)):0; return `<div class="collection-entry"><div class="entry-label">↓ ${escapeHtml(item.name)}<small>${escapeHtml(item.state)} · ${formatBytes(item.received)} / ${item.total?formatBytes(item.total):'Unknown size'} ${item.total&&['In progress','Paused'].includes(item.state)?`· ${percent}%`:''}<br>${escapeHtml(item.path||'')}</small></div>${['In progress','Paused'].includes(item.state)?`<button data-download="${item.id}" data-download-action="${item.paused?'resume':'pause'}">${item.paused?'Resume':'Pause'}</button><button data-download="${item.id}" data-download-action="cancel">Cancel</button>`:''}${item.state==='Interrupted'&&item.canResume?`<button data-download="${item.id}" data-download-action="resume">Resume</button>`:''}${item.state==='Complete'?`<button data-download="${item.id}" data-download-action="open">Open</button><button data-download="${item.id}" data-download-action="reveal">Show</button>`:''}</div>`; }
     return `<div class="collection-entry"><button class="entry-open" data-open-url="${escapeAttr(item.url)}">${item.read?'✓':'◉'} ${escapeHtml(item.title||item.url)}<small>${escapeHtml(item.url)}</small></button><button data-reading-toggle="${escapeAttr(item.url)}">${item.read?'Unread':'Read'}</button><button data-reading-delete="${escapeAttr(item.url)}">×</button></div>`;
   }).join('');
+  if (name === 'history') host.querySelectorAll('.history-site-icon img').forEach((img)=>{
+    let fallbacks = JSON.parse(img.dataset.fallbacks || '[]');
+    img.addEventListener('error',()=>{
+      if (fallbacks.length) { img.src = fallbacks.shift(); return; }
+      img.hidden=true;
+      img.nextElementSibling.hidden=false;
+    });
+  });
 }
 function formatBytes(bytes) { if(!Number(bytes))return '0 B'; const units=['B','KB','MB','GB']; const unit=Math.min(Math.floor(Math.log(bytes)/Math.log(1024)),units.length-1); return `${(bytes/1024**unit).toFixed(unit?1:0)} ${units[unit]}`; }
+function historySiteName(hostName, pageTitle) {
+  const host = String(hostName || '').toLowerCase();
+  if (host === 'mail.google.com') return 'Gmail';
+  if (host.endsWith('google.com')) return 'Google';
+  if (host === 'youtube.com' || host === 'youtu.be') return 'YouTube';
+  const known = {'takeuforward.org':'takeUforward','github.com':'GitHub','chatgpt.com':'ChatGPT','openai.com':'OpenAI','stackoverflow.com':'Stack Overflow','reddit.com':'Reddit','wikipedia.org':'Wikipedia','microsoft.com':'Microsoft','outlook.com':'Outlook','amazon.com':'Amazon','facebook.com':'Facebook','instagram.com':'Instagram','linkedin.com':'LinkedIn'};
+  if (known[host]) return known[host];
+  if (pageTitle && !/^https?:\/\//i.test(pageTitle)) return String(pageTitle).trim();
+  return hostName || pageTitle || 'Website';
+}
 function saveCollection(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
 function bindCollection(name) {
   const search=contentView.querySelector('.collection-search'); let searchTimer=null; search?.addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>renderCollection(name,search.value),100);});
@@ -349,6 +453,11 @@ function showAuthMessage(message, success = false) {
   status.textContent = message || '';
   status.classList.toggle('success', success);
 }
+function authErrorText(error) {
+  return String(error?.message || 'Authentication failed. Please try again.')
+    .replace(/^Error invoking remote method '[^']+':\s*/, '')
+    .replace(/^Error:\s*/, '');
+}
 function updateSettingsAuth() {
   if (contentView.dataset.panel !== 'settings') return;
   const state = contentView.querySelector('#settings-account-state');
@@ -361,19 +470,39 @@ function updateSettingsAuth() {
   signIn.hidden = Boolean(authUser);
   logout.hidden = !authUser;
 }
+function updateSidebarAccount() {
+  $('sidebar-account-card').hidden = Boolean(authUser);
+}
 function renderAuth(user) {
   authUser = user || null;
   $('auth-form-view').hidden = Boolean(authUser);
   const signedIn = $('auth-signed-in');
   signedIn.hidden = !authUser;
   signedIn.innerHTML = authUser ? `<strong>${escapeHtml(authUser.displayName || 'Signed in')}</strong><span>${escapeHtml(authUser.email || '')}</span>` : '';
+  const greeting = $('account-greeting');
+  const avatarImage = $('account-avatar-image');
+  const avatarInitial = $('account-avatar-initial');
+  greeting.hidden = !authUser;
+  if (authUser) {
+    const name = String(authUser.displayName || authUser.email?.split('@')[0] || 'there').trim();
+    $('account-greeting-name').textContent = name.split(/\s+/)[0] || 'there';
+    avatarInitial.textContent = (name[0] || 'U').toLocaleUpperCase();
+    const photoUrl = /^https:\/\//i.test(authUser.photoUrl || '') ? authUser.photoUrl : '';
+    avatarImage.hidden = !photoUrl;
+    avatarInitial.hidden = Boolean(photoUrl);
+    if (photoUrl) avatarImage.src = photoUrl;
+    else avatarImage.removeAttribute('src');
+  }
   updateSettingsAuth();
+  updateSidebarAccount();
 }
 function setAuthMode(mode) {
   authMode = mode;
+  $('auth-form-actions').classList.toggle('signup-mode', mode === 'signup');
+  $('auth-forgot-password').hidden = mode === 'signup';
   $('auth-title').textContent = mode === 'signup' ? 'Create your account' : 'Your browser, your account';
   $('email-submit').textContent = mode === 'signup' ? 'Create account' : 'Log in';
-  $('auth-mode-toggle').innerHTML = mode === 'signup' ? 'Already have an account? <strong>Log in</strong>' : 'New to MantraAI? <strong>Create an account</strong>';
+  $('auth-mode-toggle').textContent = mode === 'signup' ? 'Log in' : 'Create an account';
   $('auth-password').autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
   showAuthMessage('');
 }
@@ -382,12 +511,14 @@ function setAuthBusy(busy) {
   $('google-sign-in').disabled = busy;
   $('email-submit').disabled = busy;
   $('auth-mode-toggle').disabled = busy;
+  $('auth-forgot-password').disabled = busy;
   $('auth-email').disabled = busy;
   $('auth-password').disabled = busy;
   $('email-submit').textContent = busy ? 'Please wait…' : (authMode === 'signup' ? 'Create account' : 'Log in');
 }
 function openAuth() {
   $('auth-modal').hidden = false;
+  if (!authUser) setAuthMode('login');
   showAuthMessage(!authConfigured ? authConfigHint : '');
   if (!authUser) $('auth-email').focus();
 }
@@ -405,10 +536,31 @@ async function performAuth(action) {
     const user = action === 'signup' ? await api.auth.signUp(email, password) : await api.auth.signIn(email, password);
     renderAuth(user);
     $('auth-password').value = '';
+    showHome();
     closeAuth();
     toast(action === 'signup' ? 'Your account is ready' : 'Welcome back');
-  } catch (error) { showAuthMessage(error.message || 'Authentication failed. Please try again.'); }
+  } catch (error) { showAuthMessage(authErrorText(error)); }
   finally { setAuthBusy(false); }
+}
+async function performPasswordReset() {
+  if (authBusy) return;
+  if (!authConfigured) { showAuthMessage(authConfigHint); return; }
+  const email = $('auth-email').value.trim();
+  if (!email || !$('auth-email').checkValidity()) {
+    showAuthMessage('Enter your email address first.');
+    $('auth-email').focus();
+    return;
+  }
+  setAuthBusy(true);
+  showAuthMessage('');
+  try {
+    await api.auth.sendPasswordReset(email);
+    showAuthMessage(`If an account exists for ${email}, a password reset email has been sent.`, true);
+  } catch (error) {
+    const message = authErrorText(error);
+    if (/EMAIL_NOT_FOUND|No account was found/i.test(message)) showAuthMessage(`If an account exists for ${email}, a password reset email has been sent.`, true);
+    else showAuthMessage(message);
+  } finally { setAuthBusy(false); }
 }
 function navigate(value) {
   const address = String(value || '').trim();
@@ -425,7 +577,6 @@ function toggleBookmark() {
   else { bookmarks.unshift({url:activeUrl,title:activeUrl}); toast('Page bookmarked'); }
   localStorage.setItem('mantra-bookmarks', JSON.stringify(bookmarks));
   const saved = bookmarks.some((item) => item.url === activeUrl);
-  $('bookmark-toggle').textContent = saved ? '★' : '☆';
   $('bookmark-toggle').setAttribute('aria-pressed', String(saved));
   $('bookmark-toggle').title = saved ? 'Remove bookmark' : 'Bookmark this page';
   if(contentView.dataset.panel==='bookmarks')renderCollection('bookmarks',contentView.querySelector('.collection-search')?.value||'');
@@ -456,32 +607,41 @@ $('address-form').addEventListener('submit', (event) => { event.preventDefault()
 $('back').addEventListener('click', () => api.back());
 $('forward').addEventListener('click', () => api.forward());
 $('reload').addEventListener('click', () => api.reload());
-$('home-search').addEventListener('submit', (event) => { event.preventDefault(); runSearch($('home-query').value); });
-$('assistant-form').addEventListener('submit', (event) => { event.preventDefault(); const q = $('assistant-query').value.trim(); if (q) runSearch(q); });
+const homeSearch = $('home-search');
+const homeQuery = $('home-query');
+const homeSearchButton = $('home-search-submit');
+const updateHomeSearchAction = () => {
+  const hasQuery = Boolean(homeQuery.value.trim());
+  homeSearch.classList.toggle('has-query', hasQuery);
+  homeSearchButton.setAttribute('aria-label', 'Search with MantraAI Mode');
+  homeSearchButton.title = 'Search with MantraAI Mode';
+};
+homeQuery.addEventListener('input', updateHomeSearchAction);
+updateHomeSearchAction();
+homeSearch.addEventListener('submit', (event) => { event.preventDefault(); runSearch(homeQuery.value); });
 $('panel-toggle').addEventListener('click', () => setPanel(!panelOpen));
 $('auth-close').addEventListener('click', closeAuth);
+$('sidebar-auth-action').addEventListener('click', openAuth);
+$('account-greeting').addEventListener('click', openAuth);
 $('auth-modal').addEventListener('click', (event) => { if (event.target === $('auth-modal')) closeAuth(); });
 $('auth-mode-toggle').addEventListener('click', () => setAuthMode(authMode === 'login' ? 'signup' : 'login'));
+$('auth-forgot-password').addEventListener('click', performPasswordReset);
 $('email-auth-form').addEventListener('submit', (event) => { event.preventDefault(); performAuth(authMode); });
 $('google-sign-in').addEventListener('click', async () => {
   if (authBusy) return;
   if (!authConfigured) { showAuthMessage(authConfigHint); return; }
   if (!googleConfigured) { showAuthMessage(`Google sign-in is not configured. ${authConfigHint}`); return; }
   setAuthBusy(true); showAuthMessage('Complete Google sign-in in your browser…');
-  try { const user = await api.auth.signInWithGoogle(); renderAuth(user); closeAuth(); toast('Welcome to MantraAI Browser'); }
-  catch (error) { showAuthMessage(error.message || 'Google sign-in failed. Please try again.'); }
+  try { const user = await api.auth.signInWithGoogle(); renderAuth(user); showHome(); closeAuth(); toast('Welcome to MantraAI Browser'); }
+  catch (error) { showAuthMessage(authErrorText(error)); }
   finally { setAuthBusy(false); }
 });
 $('auth-modal').addEventListener('keydown', (event) => { if (event.key === 'Escape') closeAuth(); });
 $('panel-close').addEventListener('click', () => setPanel(false));
+$('panel-view-back').addEventListener('click', showHome);
 $('new-tab').addEventListener('click', () => api.newTab());
 $('sidebar-new-tab').addEventListener('click', () => api.newTab());
 document.querySelectorAll('[data-panel]').forEach((button) => button.addEventListener('click', () => { if (button.closest('.toolbar-tools')) setPanel(true); updateContent(button.dataset.panel); }));
-document.querySelectorAll('.assistant-shortcuts [data-action]').forEach((button) => button.addEventListener('click', () => {
-  const action = button.dataset.action; const field = $('assistant-query');
-  const prompts = {search:'Search the web for ',summarize:'Summarize ',write:'Help me write ',code:'Help me code '};
-  field.value = prompts[action] || ''; field.focus();
-}));
 document.querySelectorAll('.trending-grid button').forEach((button) => button.addEventListener('click', () => runSearch(button.textContent.replace('⌕','').trim())));
 $('favorites').addEventListener('click', (event) => {
   const menuToggle = event.target.closest('[data-shortcut-menu]');
@@ -520,6 +680,7 @@ document.addEventListener('click', (event) => {
 });
 $('incognito-button').addEventListener('click', () => api.openIncognito());
 $('desktop-button').addEventListener('click', () => { api.desktopSite(); toast('Desktop view enabled for the current page'); });
+$('theme-toggle').addEventListener('click', () => applyTheme(document.body.classList.contains('light-theme') ? 'dark' : 'light'));
 $('bookmark-toggle').addEventListener('click', toggleBookmark);
 $('find-query').addEventListener('input', () => { lastFindQuery = ''; runFind(true); });
 $('find-query').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); runFind(!event.shiftKey); } });
@@ -543,15 +704,16 @@ api.onState((state) => {
     home.hidden = true; defaultHome.hidden = true;
   }
   if (state.url && !['chrome://','devtools://'].some((prefix) => state.url.startsWith(prefix))) {
-    historyItems = [{url:state.url,title:state.title||state.url,time:Date.now()}, ...historyItems.filter((item) => item.url !== state.url)].slice(0,500);
+    const previous = historyItems.find((item) => item.url === state.url);
+    historyItems = [{url:state.url,title:state.title||state.url,favicon:state.favicon||previous?.favicon||'',time:Date.now()}, ...historyItems.filter((item) => item.url !== state.url)].slice(0,500);
     localStorage.setItem('mantra-history', JSON.stringify(historyItems));
+    if (!contentView.hidden && contentView.dataset.panel === 'history') renderCollection('history',contentView.querySelector('.collection-search')?.value||'');
   }
   const saved = bookmarks.some((item) => item.url === activeUrl);
-  $('bookmark-toggle').textContent = saved ? '★' : '☆';
   $('bookmark-toggle').setAttribute('aria-pressed', String(saved));
   $('bookmark-toggle').title = saved ? 'Remove bookmark' : 'Bookmark this page';
 });
-api.onTabs((state) => { tabs = state.tabs; activeTabId = state.activeId; renderTabs(); if(contentView.dataset.panel==='openTabs')renderCollection('openTabs',contentView.querySelector('.collection-search')?.value||''); });
+api.onTabs((state) => { tabs = state.tabs; activeTabId = state.activeId; renderTabs(); renderHomeShortcuts(); if(contentView.dataset.panel==='openTabs')renderCollection('openTabs',contentView.querySelector('.collection-search')?.value||''); });
 api.onFindResult((result) => { $('find-count').textContent = result.matches ? `${result.activeMatchOrdinal} / ${result.matches}` : '0 / 0'; });
 api.onShortcut((action) => {
   if (action === 'new-tab') api.newTab();
@@ -572,6 +734,7 @@ api.auth.getState().then((state) => {
   authConfigHint = state.configHint || authConfigHint;
   renderAuth(state.user);
 }).catch(() => {
+  renderAuth(null);
   showAuthMessage('Could not load account status. Restart MantraAI Browser and try again.');
 });
 
@@ -600,7 +763,7 @@ document.addEventListener('keydown', (event) => {
   else if(modifier&&key===','){event.preventDefault();setPanel(true);updateContent('settings');}
   else if(modifier&&key==='p'){event.preventDefault();api.print();}
 });
-document.body.classList.toggle('light-theme', localStorage.getItem('mantra-theme') === 'light');
+applyTheme(localStorage.getItem('mantra-theme') || 'dark');
 applyWallpaper(localStorage.getItem('mantra-wallpaper') || 'default');
 configureWallpaperRotation();
 setPanel(false);

@@ -2,6 +2,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('browserAPI', {
+  platform: process.platform,
   navigate: (address) =>
     ipcRenderer.send('browser:navigate', address),
   newTab: () => ipcRenderer.send('browser:new-tab'),
@@ -16,6 +17,7 @@ contextBridge.exposeInMainWorld('browserAPI', {
   setPanelOpen: (open) => ipcRenderer.send('browser:panel-open', open),
   setModalOpen: (open) => ipcRenderer.send('browser:modal-open', open),
   windowAction: (action) => ipcRenderer.send('browser:window-action', action),
+  setWindowTheme: (theme) => ipcRenderer.send('browser:window-theme', theme),
   openIncognito: () => ipcRenderer.send('browser:incognito'),
   desktopSite: () => ipcRenderer.send('browser:desktop-site'),
   chooseWallpaper: () => ipcRenderer.invoke('browser:choose-wallpaper'),
@@ -37,6 +39,7 @@ contextBridge.exposeInMainWorld('browserAPI', {
     getState: () => ipcRenderer.invoke('auth:get-state'),
     signUp: (email, password) => ipcRenderer.invoke('auth:sign-up', email, password),
     signIn: (email, password) => ipcRenderer.invoke('auth:sign-in', email, password),
+    sendPasswordReset: (email) => ipcRenderer.invoke('auth:reset-password', email),
     signInWithGoogle: () => ipcRenderer.invoke('auth:google'),
     logout: () => ipcRenderer.invoke('auth:logout'),
     onState: (callback) => ipcRenderer.on('auth:state', (_event, user) => callback(user))
