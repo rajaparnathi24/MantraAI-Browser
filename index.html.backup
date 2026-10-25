@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MantraAI Browser</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="chrome">
+    <div class="topline">
+      <div class="app-mark" aria-label="MantraAI Browser"><img class="brand-image" src="assets/mantraai-logo-transparent.png" alt="MantraAI logo"></div>
+      <div class="app-name">MantraAI Browser</div>
+      <div id="tab-strip" class="tabs"></div><button id="new-tab" class="new-tab" title="New tab">+</button>
+      <div class="window-actions"><button aria-label="Minimize">−</button><button aria-label="Maximize">□</button><button aria-label="Close">×</button></div>
+    </div>
+    <div class="toolbar">
+      <div class="navigation"><button id="back" title="Back" disabled>‹</button><button id="forward" title="Forward" disabled>›</button><button id="reload" title="Reload">⟳</button></div>
+      <form id="address-form" class="address-form"><span class="search-icon">⌕</span><input id="address" placeholder="Search or type a URL" autocomplete="off"><button type="submit" aria-label="Go">→</button></form>
+      <div class="toolbar-tools"><button id="bookmark-toggle" title="Bookmark this page" aria-label="Bookmark this page" aria-pressed="false">☆</button><button data-panel="downloads" title="Downloads" aria-label="Downloads">↓</button><button data-panel="history" title="History" aria-label="History">◷</button><button data-panel="settings" title="Settings" aria-label="Settings">⚙</button></div>
+      <button id="panel-toggle" class="om-toggle" aria-label="Toggle MantraAI panel" title="Open MantraAI panel"><span>ॐ</span></button>
+    </div>
+  <div id="page-find" class="find-bar" hidden><input id="find-query" placeholder="Find in page"><span id="find-count">0 / 0</span><button id="find-prev" title="Previous match">↑</button><button id="find-next" title="Next match">↓</button><button id="find-close" title="Close">×</button></div>
+  </header>
+
+  <main id="home" class="home-screen">
+    <div class="hero">
+      <img class="hero-logo" src="assets/mantraai-logo-transparent.png" alt="MantraAI">
+      <div class="browser-label">B r o w s e r</div>
+      <div class="motto"><span></span>Search <b>•</b> Explore <b>•</b> Create <b>•</b> Grow<span></span></div>
+      <form id="home-search" class="home-search"><span>⌕</span><input id="home-query" placeholder="Search the web..."><button type="submit" aria-label="Ask MantraAI">✦</button></form>
+      <div class="favorites" id="favorites">
+        <button data-url="https://www.google.com"><img class="favorite-icon" src="https://www.google.com/s2/favicons?domain=google.com&amp;sz=64" alt="Google logo"><span>Google</span></button>
+        <button data-url="https://www.youtube.com"><img class="favorite-icon" src="https://www.youtube.com/favicon.ico" alt="YouTube logo"><span>YouTube</span></button>
+        <button data-url="https://github.com"><img class="favorite-icon" src="https://github.com/favicon.ico" alt="GitHub logo"><span>GitHub</span></button>
+        <button data-url="https://mail.google.com"><img class="favorite-icon" src="https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico" alt="Gmail logo"><span>Gmail</span></button>
+        <button data-url="https://chatgpt.com"><img class="favorite-icon" src="https://chatgpt.com/favicon.ico" alt="ChatGPT logo"><span>ChatGPT</span></button>
+        <button id="add-favorite"><span class="favorite-icon add">+</span><span>Add</span></button>
+      </div>
+      <section class="trending"><div class="trending-title"><span>♨</span> Trending Today</div><div class="trending-grid">
+        <button>⌕ <span>AI Agents in 2025</span></button><button>⌕ <span>Machine Learning Trends</span></button><button>⌕ <span>Web Development</span></button>
+        <button>⌕ <span>GATE 2027 Preparation</span></button><button>⌕ <span>Best Laptops for Students</span></button><button>⌕ <span>Productivity Tools</span></button>
+      </div></section>
+    </div>
+    <div class="home-footer"><div class="powered"><img class="powered-logo" src="assets/mantraai-logo-transparent.png" alt=""> Powered by MantraAI</div></div>
+  </main>
+
+  <main id="default-home" class="home-screen verse-screen" hidden>
+    <section class="mantra-card" aria-labelledby="mantra-title">
+      <div class="mantra-source" id="mantra-title">Gāyatrī Mantra · Ṛgveda 3.62.10</div>
+      <p class="mantra-sanskrit" lang="sa">ॐ भूर्भुवः स्वः । तत्सवितुर्वरेण्यं भर्गो देवस्य धीमहि । धियो यो नः प्रचोदयात् ॥</p>
+      <p class="mantra-meaning"><strong>Meaning</strong> — We meditate upon the most worthy radiance of Savitṛ; may that divine light inspire and guide our understanding.</p>
+      <p class="mantra-note">A prayer for clarity and discernment: a call to seek wisdom, illuminate thought, and choose a path with understanding.</p>
+      <small class="mantra-prefix-note">“Om bhūr bhuvaḥ svaḥ” is the traditional recitation prefix; the Ṛgveda verse begins “tat savitur vareṇyam.”</small>
+    </section>
+  </main>
+
+  <aside id="assistant-panel" class="assistant-panel">
+    <div class="panel-head"><div class="panel-logo"><img class="brand-image" src="assets/mantraai-logo-transparent.png" alt="MantraAI logo"></div><div class="panel-title"><strong>Mantra<span>AI</span></strong><small>Assistant</small></div><button id="panel-close" aria-label="Close panel">×</button></div>
+    <form id="assistant-form" class="assistant-input"><input id="assistant-query" placeholder="Ask anything..."><button type="submit" aria-label="Send">➤</button></form>
+    <div class="assistant-shortcuts"><button data-action="search"><span>⌕</span>Web Search</button><button data-action="summarize"><span>▤</span>Summarize</button><button data-action="write"><span>♢</span>Write</button><button data-action="code"><span>&lt;/&gt;</span>Code</button></div>
+    <div id="panel-content">
+      <div class="side-nav">
+        <button class="side-item" id="sidebar-new-tab"><span class="side-icon">＋</span>New Tab</button>
+        <button class="side-item selected" data-panel="home"><span class="side-icon">⌂</span>Home</button>
+        <button class="side-item" data-panel="chat"><span class="side-icon">▢</span>Chat</button>
+        <button class="side-item" data-panel="bookmarks"><span class="side-icon">♧</span>Bookmarks</button>
+        <button class="side-item" data-panel="history"><span class="side-icon">◷</span>History</button>
+        <button class="side-item" data-panel="downloads"><span class="side-icon">↓</span>Downloads</button>
+        <button class="side-item" data-panel="extensions"><span class="side-icon">✣</span>Extensions</button>
+        <button class="side-item" data-panel="settings"><span class="side-icon">⚙</span>Settings</button>
+        <button class="side-item" id="incognito-button"><span class="side-icon">◉</span>New Incognito Window</button>
+        <button class="side-item" id="desktop-button"><span class="side-icon">▣</span>Desktop Site</button>
+      </div>
+      <div class="quick-access"><div class="quick-title"><span>ϟ</span> Quick Access</div>
+        <button class="side-item" data-panel="chat"><span class="side-icon gold-icon">▣</span>MantraAI Chat</button>
+        <button class="side-item" data-panel="notes"><span class="side-icon gold-icon">▤</span>Notes</button>
+        <button class="side-item" data-panel="reading"><span class="side-icon gold-icon">▤</span>Reading List</button>
+      </div>
+      <div class="panel-quote"><span class="quote-ornament">───── ❀ ─────</span><em>Better Thoughts<br>Create a Better<br>Tomorrow</em><span class="quote-ornament">──── ❀ ────</span></div>
+    </div>
+    <section id="content-view" class="content-view" hidden></section>
+  </aside>
+  <script src="renderer.js"></script>
+</body>
+</html>

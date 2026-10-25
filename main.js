@@ -20,7 +20,6 @@ if (process.platform === 'win32') {
 }
 
 let win;
-let browserColorScheme = 'dark';
 let tabs = [];
 let closedTabs = [];
 let activeTabId = null;
@@ -35,6 +34,18 @@ let authSession = null;
 let authRefreshInFlight = null;
 const TOOLBAR_HEIGHT = 96;
 const PANEL_WIDTH = 366;
+function userAgentForUrl(userAgent, url) {
+  try {
+    if (new URL(url).hostname.toLowerCase() === 'web.whatsapp.com') {
+      return userAgent.replace(/\s(?:Electron|mantraai-browser)\/[\w.-]+/gi, '');
+    }
+  } catch {}
+  return userAgent;
+}
+function applySiteUserAgent(contents, nativeUserAgent, url) {
+  const userAgent = userAgentForUrl(nativeUserAgent, url);
+  if (contents.getUserAgent() !== userAgent) contents.setUserAgent(userAgent);
+}
 const extensionListPath = () => path.join(app.getPath('userData'), 'unpacked-extensions.json');
 function readExtensionPaths() { try { const list=JSON.parse(fs.readFileSync(extensionListPath(),'utf8')); return Array.isArray(list)?list.filter((item)=>typeof item==='string'):[]; } catch { return []; } }
 function writeExtensionPaths(paths) { fs.mkdirSync(path.dirname(extensionListPath()),{recursive:true}); fs.writeFileSync(extensionListPath(),JSON.stringify(paths,null,2),'utf8'); }
@@ -43,6 +54,11 @@ function attachIncognitoNavigationSecurity(contents) {
     try { const protocol=new URL(target).protocol; return protocol==='http:'||protocol==='https:'; }
     catch { return false; }
   };
+  const nativeUserAgent = contents.getUserAgent();
+  contents.on('will-navigate',(_event,target)=>applySiteUserAgent(contents,nativeUserAgent,target));
+  contents.on('will-redirect',(_event,target,_isInPlace,isMainFrame)=>{
+    if (isMainFrame) applySiteUserAgent(contents,nativeUserAgent,target);
+  });
   contents.on('will-navigate',(event,target)=>{ if(!isWebNavigation(target))event.preventDefault(); });
   contents.on('will-redirect',(event,target,_isInPlace,isMainFrame)=>{ if(isMainFrame&&!isWebNavigation(target))event.preventDefault(); });
 }
@@ -341,8 +357,8 @@ function createTab({ url = null, activate = true, verseHome = false } = {}) {
   }
   const id = nextTabId++;
   const view = new WebContentsView({ webPreferences:{ contextIsolation:true, nodeIntegration:false, sandbox:true } });
-  applyTabColorScheme(view.webContents);
-  const tab = { id, view, title:'New Tab', url:'', favicon:'', home:true, verseHome:Boolean(verseHome), desktopSite:false };
+  const nativeUserAgent = view.webContents.getUserAgent();
+  const tab = { id, view, nativeUserAgent, title:'New Tab', url:'', favicon:'', home:true, verseHome:Boolean(verseHome), desktopSite:false };
   tabs.push(tab);
   win.contentView.addChildView(view);
   view.webContents.on('page-title-updated',(_event,title)=>{ tab.title=title || tab.url || 'New Tab'; publishTabs(); if(activeTabId===tab.id)sendState(); });
@@ -359,11 +375,9 @@ function createTab({ url = null, activate = true, verseHome = false } = {}) {
   }
   for (const event of ['did-start-loading','did-stop-loading']) view.webContents.on(event,sendState);
   view.webContents.on('did-finish-load',()=>{
-    applyTabColorScheme(view.webContents);
     view.webContents.insertCSS('::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}').catch(()=>{});
     sendState();
   });
-  view.webContents.on('devtools-closed',()=>applyTabColorScheme(view.webContents));
   view.webContents.on('before-input-event',(event,input)=>browserShortcut(tab,event,input));
   view.webContents.on('will-navigate',(event,target)=>{
     try { const protocol=new URL(target).protocol; if(protocol!=='http:'&&protocol!=='https:')event.preventDefault(); }
@@ -390,22 +404,10 @@ function createTab({ url = null, activate = true, verseHome = false } = {}) {
   return tab;
 }
 
-function applyTabColorScheme(webContents) {
-  if (!webContents || webContents.isDestroyed()) return;
-  const protocol = webContents.debugger;
-  try {
-    if (!protocol.isAttached()) protocol.attach('1.3');
-    protocol.sendCommand('Emulation.setEmulatedMedia', {
-      features:[{name:'prefers-color-scheme',value:browserColorScheme}]
-    }).catch((error)=>console.warn('Could not sync the tab color scheme:',error.message));
-  } catch (error) {
-    console.warn('Could not sync the tab color scheme:',error.message);
-  }
-}
-
 function navigateTab(tab, address) {
   const url=normalizeAddress(address);
   if (!url || !tab) return;
+  applySiteUserAgent(tab.view.webContents,tab.nativeUserAgent,url);
   tab.home=false;
   tab.verseHome=false;
   tab.url=url;
@@ -519,9 +521,7 @@ ipcMain.on('browser:window-action',(_event,action)=>{
 });
 ipcMain.on('browser:window-theme',(_event,theme)=>{
   const light = theme === 'light';
-  browserColorScheme = light ? 'light' : 'dark';
   nativeTheme.themeSource = light ? 'light' : 'dark';
-  for (const tab of tabs) applyTabColorScheme(tab.view.webContents);
   if (win && !win.isDestroyed() && process.platform === 'win32') {
     win.setTitleBarOverlay({color:light?'#f5f7fa':'#0d1825',symbolColor:light?'#303c4b':'#d9e0e8'});
   }
@@ -530,6 +530,8 @@ ipcMain.on('browser:incognito',()=>{
   const privateSession=session.fromPartition(`incognito-${Date.now()}`,{cache:false});
   const createPrivateWindow=(initialUrl='https://www.google.com')=>{
     const privateWindow=new BrowserWindow({width:1200,height:800,title:'MantraAI Browser — Incognito',backgroundColor:'#080f1b',icon:path.join(__dirname,'assets','mantraai-logo-transparent.png'),webPreferences:{contextIsolation:true,nodeIntegration:false,sandbox:true,session:privateSession}});
+    const nativeUserAgent = privateWindow.webContents.getUserAgent();
+    applySiteUserAgent(privateWindow.webContents,nativeUserAgent,initialUrl);
     attachIncognitoNavigationSecurity(privateWindow.webContents);
     privateWindow.webContents.setWindowOpenHandler(({url})=>{
       const target=normalizeAddress(url);
